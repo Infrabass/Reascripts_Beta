@@ -3221,7 +3221,7 @@ function Frame()
 		else
 			if flashmob_is_invalid == true then
 				local invalid_flashmob_text = "Flashmob have been detected but Snap Heap is probably missing"
-				invalid_flashmob_text = WrapText(invalid_flashmob_text)
+				invalid_flashmob_text = WrapText(invalid_flashmob_text, width)
 				reaper.ImGui_Text(ctx, invalid_flashmob_text)
 			else
 				reaper.ImGui_Dummy(ctx, 0, 0)
