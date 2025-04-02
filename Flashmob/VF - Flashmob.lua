@@ -2,7 +2,7 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.2.1
+-- @Version 0.2.2
 -- @Changelog
 --   Beta release
 -- @Provides
@@ -29,6 +29,8 @@ Full Changelog:
 		+ Add a subtle close button to close the window
 	v0.2.1
 		+ Improve missing Snap Heap detection
+	v0.2.2
+		+ Small fix
 
 ]]
 

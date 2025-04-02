@@ -5,6 +5,8 @@ in_pin:right input
 out_pin:left output
 out_pin:right output
 
+slider1:0<0,0>-Dummy
+
 @init
 
 db = -9;
