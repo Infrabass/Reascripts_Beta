@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="VF_Reascripts Beta" commit="ff4c0ce3c0d3c91247d44a16e4c74f24dd1734af">
+<index version="1" name="VF_Reascripts Beta" commit="d4e45ae8ea225123d253aec5a5a24b6670519ebf">
   <category name="Flashmob">
     <reapack name="VF - Flashmob.lua" type="script">
       <metadata>
@@ -23,6 +23,15 @@
         <source file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/2081067a1bcd45fea63b82b80f46e2bcc2ade69e/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
         <source type="effect" file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/2081067a1bcd45fea63b82b80f46e2bcc2ade69e/Flashmob/vf_FLASHMOB.jsfx</source>
         <source type="effect" file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/2081067a1bcd45fea63b82b80f46e2bcc2ade69e/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
+      </version>
+      <version name="0.2" author="Vincent Fliniaux (Infrabass)" time="2025-04-02T19:57:38Z">
+        <changelog><![CDATA[Beta release]]></changelog>
+        <source main="main">https://github.com/Infrabass/Reascripts_Beta/raw/d4e45ae8ea225123d253aec5a5a24b6670519ebf/Flashmob/VF%20-%20Flashmob.lua</source>
+        <source file="Flashmob.RfxChain">https://github.com/Infrabass/Reascripts_Beta/raw/d4e45ae8ea225123d253aec5a5a24b6670519ebf/Flashmob/Flashmob.RfxChain</source>
+        <source file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/d4e45ae8ea225123d253aec5a5a24b6670519ebf/Flashmob/vf_FLASHMOB.jsfx</source>
+        <source file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/d4e45ae8ea225123d253aec5a5a24b6670519ebf/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
+        <source type="effect" file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/d4e45ae8ea225123d253aec5a5a24b6670519ebf/Flashmob/vf_FLASHMOB.jsfx</source>
+        <source type="effect" file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/d4e45ae8ea225123d253aec5a5a24b6670519ebf/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
       </version>
     </reapack>
   </category>
