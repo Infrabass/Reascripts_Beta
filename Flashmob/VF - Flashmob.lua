@@ -2,9 +2,9 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.2.3
+-- @Version 0.2.4
 -- @Changelog
---   Beta release
+--   Fix for Nono
 -- @Provides
 --   [main] VF - Flashmob.lua
 --   Flashmob.RfxChain
@@ -32,7 +32,9 @@ Full Changelog:
 	v0.2.2
 		+ Small fix
 	v0.2.3
-		+ Small fix		
+		+ Small fix	
+	v0.2.4
+		+ Fix for Nono				
 
 ]]
 
