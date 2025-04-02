@@ -1,4 +1,4 @@
-# VF Reacripts & JSFX BETA repository
+# VF Reacripts & JSFX repository - BETA
 BETA scripts and jsfx from Vincent Fliniaux
 
 # Installation
