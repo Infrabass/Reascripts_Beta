@@ -230,7 +230,7 @@ function GetFlashmobInstances(track, target_fx_name)
 				local _, container_fx_num = reaper.TrackFX_GetNamedConfigParm(track, fx_id, "container_count")
 				for j=0, container_fx_num-1 do
 					local container_fx = 0x2000000 + ((j + 1) * (fx_count + 1)) + (fx_id + 1) -- (index of FX in container + 1) * (fxchain count + 1) + (index of container + 1)		
-					if reaper.TrackFX_GetNumParams(track, container_fx) <= 3 then
+					if reaper.TrackFX_GetNumParams(track, container_fx) <= 4 then
 						flashmob_is_invalid = true
 					end
 				end
