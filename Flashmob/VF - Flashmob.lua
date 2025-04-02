@@ -2515,11 +2515,11 @@ function Frame()
 		reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ItemSpacing(), 0, 1) -- remove item spacing (remove empty space between track name and header)
 
 		local item_inner_spacing = {reaper.ImGui_GetStyleVar(ctx, reaper.ImGui_StyleVar_ItemInnerSpacing())}
-		local x, y = reaper.ImGui_GetCursorScreenPos(ctx)
+		local rect_x, rect_y = reaper.ImGui_GetCursorScreenPos(ctx)
 		local track_name_clipped = ClipText(track_name, width)		
 		local text_w, text_h = reaper.ImGui_CalcTextSize(ctx, track_name_clipped)
 		local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
-		reaper.ImGui_DrawList_AddRectFilled(draw_list, x - win_padding_x, y - win_padding_y, (x - win_padding_x) + width, (y - win_padding_y) + text_h + 4, track_color, 12, reaper.ImGui_DrawFlags_RoundCornersTop())
+		reaper.ImGui_DrawList_AddRectFilled(draw_list, rect_x - win_padding_x, rect_y - win_padding_y, (rect_x - win_padding_x) + width, (rect_y - win_padding_y) + text_h + 4, track_color, 12, reaper.ImGui_DrawFlags_RoundCornersTop())
 
 		reaper.ImGui_SetNextItemAllowOverlap(ctx)
 		reaper.ImGui_SameLine(ctx)
@@ -2528,12 +2528,28 @@ function Frame()
 		if track_name_pos < 1 then track_name_pos = 1 end
 		reaper.ImGui_SetCursorPos(ctx, track_name_pos, y - win_padding_y + 4)
 		reaper.ImGui_Text(ctx, track_name_clipped)
+		local x, y = reaper.ImGui_GetCursorPos(ctx)
 
 		reaper.ImGui_PopStyleVar(ctx, 2)
-		reaper.ImGui_PopStyleColor(ctx, 1)
+		reaper.ImGui_PopStyleColor(ctx, 1)			
+		if track_name_clipped ~= track_name then ToolTip(track_name) end		
+
+		-- Draw small x button to close the window
+		if reaper.ImGui_IsMouseHoveringRect(ctx, rect_x - win_padding_x, rect_y - win_padding_y, (rect_x - win_padding_x) + width, (rect_y - win_padding_y) + text_h + 4) then
+			local x_color = reaper.ImGui_ColorConvertDouble4ToU32(0, 0, 0, 0.7)
+
+			if reaper.ImGui_IsMouseHoveringRect(ctx, rect_x + width - 28, rect_y - 4, rect_x + width - 28 + 18, rect_y - 4 + text_h + 4) then
+				x_color = reaper.ImGui_ColorConvertDouble4ToU32(0, 0, 0, 1)
+				if reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+					open = false
+				end
+			end			
+			reaper.ImGui_DrawList_AddText(draw_list, rect_x + width - 28, rect_y - 4, x_color, "X")
+
+		end			
 		reaper.ImGui_PopFont(ctx)
 
-		if track_name_clipped ~= track_name then ToolTip(track_name) end		
+		reaper.ImGui_SetCursorPos(ctx, x, y)
 
 		-- local rv_flashmob, t_flashmob_id
 		-- if first_run or proj_updated or project_switched or track_sel_changed then
