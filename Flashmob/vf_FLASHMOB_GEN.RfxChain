@@ -1,0 +1,10 @@
+REQUIRED_CHANNELS 4
+BYPASS 0 0
+<JS "VF_ReaScripts Beta/Flashmob/vf_FLASHMOB_GEN.jsfx" ""
+  0 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+>
+<JS_PINMAP
+  6AMAABwAAADoAwAACAAAAAIAAAABAAAAAAAAAAIAAAAAAAAAHAAAAOgDAAAIAAAAAgAAAAQAAAAAAAAACAAAAAAAAAA=
+>
+FXID {E07A1943-219A-7648-8CF4-A4A50DE8FDB0}
+WAK 0 0

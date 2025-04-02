@@ -2,7 +2,7 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.2.2
+-- @Version 0.2.3
 -- @Changelog
 --   Beta release
 -- @Provides
@@ -31,6 +31,8 @@ Full Changelog:
 		+ Improve missing Snap Heap detection
 	v0.2.2
 		+ Small fix
+	v0.2.3
+		+ Small fix		
 
 ]]
 
