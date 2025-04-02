@@ -1,0 +1,103 @@
+desc: FLASHMOB - Flexible Modulation system for Reaper by Vincent Fliniaux
+
+slider1:0<0, 100, 0.001>Macro 1
+slider2:0<0, 100, 0.001>Macro 2
+slider3:0<0, 100, 0.001>Macro 3
+slider4:0<0, 100, 0.001>Macro 4
+slider5:0<0, 100, 0.001>Macro 5
+slider6:0<0, 100, 0.001>Macro 6
+slider7:0<0, 100, 0.001>Macro 7
+slider8:0<0, 100, 0.001>Macro 8
+
+slider9:0<0,1>-Mod1
+slider10:0<0,1>-Mod2
+slider11:0<0,1>-Mod3
+slider12:0<0,1>-Mod4
+slider13:0<0,1>-Mod5
+slider14:0<0,1>-Mod6
+
+
+
+in_pin:input 1
+in_pin:input 2
+in_pin:input 3
+in_pin:input 4
+in_pin:input 5
+in_pin:input 6
+in_pin:input 7
+in_pin:input 8
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+@init
+
+
+// Initializes the attack smoother
+mod_1 = 0;
+mod_2 = 0;
+mod_3 = 0;
+mod_4 = 0;
+mod_5 = 0;
+mod_6 = 0;
+// 200 = follower attack filter freq
+flt_coef = exp(-2 * $pi * 200 / srate);
+
+////////////////////////////////////////////////////////////////////////////////
+
+@slider
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+@sample
+
+
+//Peak Detectors
+// Mod 1
+input_EF_Rect_1 = abs(spl2);
+input_EF_Rect_1 > previous_sample_1 * 0.999 ? (peak_1 = input_EF_Rect_1) : (peak_1 = previous_sample_1 * 0.999);
+previous_sample_1 = peak_1;
+
+// Mod 2
+input_EF_Rect_2 = abs(spl3);
+input_EF_Rect_2 > previous_sample_2 * 0.999 ? (peak_2 = input_EF_Rect_2) : (peak_2 = previous_sample_2 * 0.999);
+previous_sample_2 = peak_2;
+
+// Mod 3
+input_EF_Rect_3 = abs(spl4);
+input_EF_Rect_3 > previous_sample_3 * 0.999 ? (peak_3 = input_EF_Rect_3) : (peak_3 = previous_sample_3 * 0.999);
+previous_sample_3 = peak_3;
+
+// Mod 4
+input_EF_Rect_4 = abs(spl5);
+input_EF_Rect_4 > previous_sample_4 * 0.999 ? (peak_4 = input_EF_Rect_4) : (peak_4 = previous_sample_4 * 0.999);
+previous_sample_4 = peak_4;
+
+// Mod 5
+input_EF_Rect_5 = abs(spl6);
+input_EF_Rect_5 > previous_sample_5 * 0.999 ? (peak_5 = input_EF_Rect_5) : (peak_5 = previous_sample_5 * 0.999);
+previous_sample_5 = peak_5;
+
+// Mod 6
+input_EF_Rect_6 = abs(spl7);
+input_EF_Rect_6 > previous_sample_6 * 0.999 ? (peak_6 = input_EF_Rect_6) : (peak_6 = previous_sample_6 * 0.999);
+previous_sample_6 = peak_6;
+
+
+//Env fol pass through LPF to smooth attack
+mod_1 = peak_1 + (mod_1 - peak_1) * flt_coef;
+mod_2 = peak_2 + (mod_2 - peak_2) * flt_coef;
+mod_3 = peak_3 + (mod_3 - peak_3) * flt_coef;
+mod_4 = peak_4 + (mod_4 - peak_4) * flt_coef;
+mod_5 = peak_5 + (mod_5 - peak_5) * flt_coef;
+mod_6 = peak_6 + (mod_6 - peak_6) * flt_coef;
+
+slider9 = mod_1 * 1.005;
+slider10 = mod_2 * 1.005;
+slider11 = mod_3 * 1.005;
+slider12 = mod_4 * 1.005;
+slider13 = mod_5 * 1.005;
+slider14 = mod_6 * 1.005;
