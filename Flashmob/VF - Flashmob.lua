@@ -2,7 +2,7 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.2.5
+-- @Version 0.2.6
 -- @Changelog
 --   Fix for Nono
 -- @Provides
@@ -35,7 +35,7 @@ Full Changelog:
 		+ Small fix	
 	v0.2.4
 		+ Fix for Nono				
-	v0.2.5
+	v0.2.6
 		+ Small fix						
 
 ]]
