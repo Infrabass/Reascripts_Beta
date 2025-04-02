@@ -203,21 +203,34 @@ end
 
 function GetFlashmobInstances(track, target_fx_name)
 	local t_flashmob_id = {}	
+	local flashmob_is_invalid
 	local fx_count = reaper.TrackFX_GetCount(track)	
 
 	for fx_id = 0, fx_count - 1 do
+		local find_Flashmob
 		local retval, fx_type = reaper.TrackFX_GetNamedConfigParm(track, fx_id, "fx_type")
 		if fx_type == "Container" then
 			local first_subfx_id = 0x2000000 + ((0 + 1) * (fx_count + 1)) + (fx_id + 1) -- (index of FX in container + 1) * (fxchain count + 1) + (index of container + 1)		
 			local retval, fx_name = reaper.TrackFX_GetFXName(track, first_subfx_id, "")
 			if retval and fx_name:find(target_fx_name) then
 				t_flashmob_id[#t_flashmob_id+1] = fx_id
+				find_Flashmob = true
+			end
+			-- Check if FX inside Flashmob are offline
+			if find_Flashmob then
+				local _, container_fx_num = reaper.TrackFX_GetNamedConfigParm(track, fx_id, "container_count")
+				for j=0, container_fx_num-1 do
+					local container_fx = 0x2000000 + ((j + 1) * (fx_count + 1)) + (fx_id + 1) -- (index of FX in container + 1) * (fxchain count + 1) + (index of container + 1)		
+					if reaper.TrackFX_GetOffline(track, container_fx) then
+						flashmob_is_invalid = true
+					end
+				end
 			end
 		end			
 	end
 
-	if t_flashmob_id[1] == nil then
-		return false -- Not found
+	if t_flashmob_id[1] == nil or flashmob_is_invalid == true then
+		return false, t_flashmob_id, flashmob_is_invalid  -- Not found or some FX are offline
 	else
 		return true, t_flashmob_id
 	end
@@ -2371,7 +2384,7 @@ function Init()
 
 	local info = debug.getinfo(1,'S')
 	script_path = info.source:match[[^@?(.*[\/])[^\/]-$]]
-	
+
 	ctx = reaper.ImGui_CreateContext('FLASHMOB')
 
 	fonts = {
@@ -2524,7 +2537,7 @@ function Frame()
 
 		-- local rv_flashmob, t_flashmob_id
 		-- if first_run or proj_updated or project_switched or track_sel_changed then
-		rv_flashmob, t_flashmob_id = GetFlashmobInstances(track, flashmob_identifier)	
+		rv_flashmob, t_flashmob_id, flashmob_is_invalid = GetFlashmobInstances(track, flashmob_identifier)	
 		-- end
 		if rv_flashmob == true then
 			-- reaper.GetSetMediaTrackInfo_String(track, "P_EXT:vf_flashmob_last_instance", "", 1)
@@ -3206,25 +3219,31 @@ function Frame()
 			end			
 
 		else
-			reaper.ImGui_Dummy(ctx, 0, 0)
-			local x, y = reaper.ImGui_GetCursorScreenPos(ctx)
-			local button_width = width * 0.75	
-			local button_height = height * 0.35		
-			local center_x = x + (width * 0.5) - (button_width * 0.5) - win_padding_x
-			local center_y = y + (height * 0.5) - (button_height * 0.5) - win_padding_y * 2
-			-- reaper.ImGui_SetCursorPos(ctx, center_x, center_y)
-			reaper.ImGui_PushFont(ctx, fonts.medium_bold)
-			-- rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, white, track_color, 1)
-			-- rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, DarkerColor2(track_color, 0.4), DarkerColor2(track_color, 0.2), 1)
-			rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, DarkerColor2(UI_color, 0.25), DarkerColor2(UI_color, 0.1), 1)
-			-- rv_addContainer = reaper.ImGui_Button(ctx, "Enable Flashmob", button_width, button_height)
-			reaper.ImGui_PopFont(ctx)
-			ToolTip("Click to enable FLASHMOB modulations & macros on this track")
-			if rv_addContainer then
-				reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts BETA Repo/Flashmob/Flashmob.RfxChain", false, 1000)	-- last argument adds an instance if one is not found at the first FX chain index				
-				reaper.TrackFX_CopyToTrack(track, reaper.TrackFX_GetCount(track)-1, track, 0, 1) -- Move Flashmob to the first FX chain slot
-				reload_settings = true
-			end		
+			if flashmob_is_invalid == true then
+				local invalid_flashmob_text = "Flashmob have been detected but Snap Heap is probably missing"
+				invalid_flashmob_text = WrapText(invalid_flashmob_text)
+				reaper.ImGui_Text(ctx, invalid_flashmob_text)
+			else
+				reaper.ImGui_Dummy(ctx, 0, 0)
+				local x, y = reaper.ImGui_GetCursorScreenPos(ctx)
+				local button_width = width * 0.75	
+				local button_height = height * 0.35		
+				local center_x = x + (width * 0.5) - (button_width * 0.5) - win_padding_x
+				local center_y = y + (height * 0.5) - (button_height * 0.5) - win_padding_y * 2
+				-- reaper.ImGui_SetCursorPos(ctx, center_x, center_y)
+				reaper.ImGui_PushFont(ctx, fonts.medium_bold)
+				-- rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, white, track_color, 1)
+				-- rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, DarkerColor2(track_color, 0.4), DarkerColor2(track_color, 0.2), 1)
+				rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, DarkerColor2(UI_color, 0.25), DarkerColor2(UI_color, 0.1), 1)
+				-- rv_addContainer = reaper.ImGui_Button(ctx, "Enable Flashmob", button_width, button_height)
+				reaper.ImGui_PopFont(ctx)
+				ToolTip("Click to enable FLASHMOB modulations & macros on this track")
+				if rv_addContainer then
+					reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts Beta/Flashmob/Flashmob.RfxChain", false, 1000)	-- last argument adds an instance if one is not found at the first FX chain index				
+					reaper.TrackFX_CopyToTrack(track, reaper.TrackFX_GetCount(track)-1, track, 0, 1) -- Move Flashmob to the first FX chain slot
+					reload_settings = true
+				end	
+			end	
 		end
 
 	else
