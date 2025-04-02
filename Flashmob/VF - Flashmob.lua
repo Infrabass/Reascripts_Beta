@@ -2,7 +2,7 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.1
+-- @Version 0.2
 -- @Changelog
 --   Beta release
 -- @Provides
@@ -22,7 +22,12 @@
 --[[
 Full Changelog:	
 	v0.1
-		+ Beta release			 
+		+ Beta release	
+	v0.2
+		+ Improve managing of missing dependencies
+		+ Detect if Snap Heap is missing
+		+ Add a subtle close button to close the window
+		
 ]]
 
 
@@ -2350,7 +2355,11 @@ function Init()
 	-- Check if ReaPack is installed
 	if not reaper.APIExists("ReaPack_BrowsePackages") then	
 		reaper.MB("Please install ReaPack from Cfillion to install other dependencies'.\n\nThen restart REAPER and run the script again.\n\nVisit https://reapack.com\n", "You must install the ReaPack extension", 0)
-		reaper.CF_ShellExecute('https://reapack.com')
+		if reaper.CF_GetSWSVersion then
+			reaper.CF_ShellExecute('https://reapack.com')
+		else
+			reaper.MB("You must download ReaPack at: https://reapack.com", 0)
+		end
 		return false
 	end
 
