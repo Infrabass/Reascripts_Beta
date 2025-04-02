@@ -2,7 +2,7 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.2
+-- @Version 0.2.1
 -- @Changelog
 --   Beta release
 -- @Provides
@@ -27,7 +27,9 @@ Full Changelog:
 		+ Improve managing of missing dependencies
 		+ Detect if Snap Heap is missing
 		+ Add a subtle close button to close the window
-		
+	v0.2.1
+		+ Improve missing Snap Heap detection
+
 ]]
 
 
@@ -226,7 +228,7 @@ function GetFlashmobInstances(track, target_fx_name)
 				local _, container_fx_num = reaper.TrackFX_GetNamedConfigParm(track, fx_id, "container_count")
 				for j=0, container_fx_num-1 do
 					local container_fx = 0x2000000 + ((j + 1) * (fx_count + 1)) + (fx_id + 1) -- (index of FX in container + 1) * (fxchain count + 1) + (index of container + 1)		
-					if reaper.TrackFX_GetOffline(track, container_fx) then
+					if reaper.TrackFX_GetNumParams(track, container_fx) <= 3 then
 						flashmob_is_invalid = true
 					end
 				end
@@ -2372,7 +2374,7 @@ function Init()
         deps[#deps + 1] = '"ReaTeam Extensions" ReaImGui'
     end
     if #deps ~= 0 then
-        reaper.ShowMessageBox("Need Additional Packages.\nPlease Install it in next window", "MISSING DEPENDENCIES", 0)
+        reaper.ShowMessageBox("Need Additional Packages\nPlease install them in the next window\nThen RESTART REAPER and run the script again", "MISSING DEPENDENCIES", 0)
         reaper.ReaPack_BrowsePackages(table.concat(deps, " OR "))
         return false
     end
