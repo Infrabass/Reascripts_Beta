@@ -1,5 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="Reascripts_Beta" commit="de2cdfe8b75e31205ae624d0d059efbe7b741496">
+<index version="1" name="Reascripts_Beta" commit="2081067a1bcd45fea63b82b80f46e2bcc2ade69e">
+  <category name="Flashmob">
+    <reapack name="VF - Flashmob.lua" type="script">
+      <metadata>
+        <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 \fmodern Courier;}}
+{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
+\widowctrl\hyphauto
+
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel0 \b \fs36 Powerful modulation system for Reaper based on the mighty Snap Heap from Kilohearts\par}
+{\pard \ql \f0 \sa180 \li0 \fi0 \outlinelevel1 \b \fs32 Dependencies\par}
+{\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Requires ReaImGui\sa180\par}
+}
+]]></description>
+        <link rel="website">https://github.com/Infrabass/Reascripts_Beta</link>
+        <link rel="screenshot">https://imgur.com/i0Azzz1</link>
+      </metadata>
+      <version name="0.1" author="Vincent Fliniaux (Infrabass)" time="2025-04-02T05:07:27Z">
+        <changelog><![CDATA[Beta release]]></changelog>
+        <source main="main">https://github.com/Infrabass/Reascripts_Beta/raw/2081067a1bcd45fea63b82b80f46e2bcc2ade69e/Flashmob/VF%20-%20Flashmob.lua</source>
+        <source file="Flashmob.RfxChain">https://github.com/Infrabass/Reascripts_Beta/raw/2081067a1bcd45fea63b82b80f46e2bcc2ade69e/Flashmob/Flashmob.RfxChain</source>
+        <source file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/2081067a1bcd45fea63b82b80f46e2bcc2ade69e/Flashmob/vf_FLASHMOB.jsfx</source>
+        <source file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/2081067a1bcd45fea63b82b80f46e2bcc2ade69e/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
+        <source type="effect" file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/2081067a1bcd45fea63b82b80f46e2bcc2ade69e/Flashmob/vf_FLASHMOB.jsfx</source>
+        <source type="effect" file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/2081067a1bcd45fea63b82b80f46e2bcc2ade69e/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
+      </version>
+    </reapack>
+  </category>
   <metadata>
     <description><![CDATA[{\rtf1\ansi\deff0{\fonttbl{\f0 \fswiss Helvetica;}{\f1 \fmodern Courier;}}
 {\colortbl;\red255\green0\blue0;\red0\green0\blue255;}
