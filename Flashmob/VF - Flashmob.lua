@@ -2,10 +2,10 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.2.7
+-- @Version 0.2.8
 -- @Changelog
---   Use another method to link the script and the FX
---   Fix macro names
+--   fix a bug with the lock feature
+--   Add tag to JSFX
 -- @Provides
 --   [main] VF - Flashmob.lua
 --   Flashmob.RfxChain
@@ -41,6 +41,9 @@ Full Changelog:
 	v0.2.7
 		+ Use another method to link the script and the FX
 		+ Fix macro names
+	v0.2.8
+		+ fix a bug with the lock feature
+		+ Add tag to JSFX
 
 
 ]]
@@ -785,7 +788,6 @@ function GetTrackColor(target_track)
 end
 
 function DarkerColor(color, mode)
-
 	local r, g, b, a = reaper.ImGui_ColorConvertU32ToDouble4(color)
 	if color == -1499027713 then
 		a = a - 0.5 -- If track has no color, make it a bit darker
@@ -1800,260 +1802,260 @@ function SineWave(draw_list, x, y, width, height, color, thickness)
 end
 
 function ADEnvelope(draw_list, x, y, width, height, color, thickness)
-		-- Attack: vertical line from left (start of x-axis)
-		local attack_x = x
-		local attack_y_start = y
-		local attack_y_end = y + height
+	-- Attack: vertical line from left (start of x-axis)
+	local attack_x = x
+	local attack_y_start = y
+	local attack_y_end = y + height
 
-		-- Decay: diagonal line from attack's end to x axis (y=0)
-		local decay_x_start = attack_x
-		local decay_y_start = y
-		local decay_x_end = x + width
-		local decay_y_end = y + height
+	-- Decay: diagonal line from attack's end to x axis (y=0)
+	local decay_x_start = attack_x
+	local decay_y_start = y
+	local decay_x_end = x + width
+	local decay_y_end = y + height
 
-		-- Control point for the curve
-		local control_x = decay_x_start + (decay_x_end - decay_x_start) / 2
-		local control_y = decay_y_start + (decay_y_end - decay_y_start) / 1  -- You can adjust this for more control over the curve    
+	-- Control point for the curve
+	local control_x = decay_x_start + (decay_x_end - decay_x_start) / 2
+	local control_y = decay_y_start + (decay_y_end - decay_y_start) / 1  -- You can adjust this for more control over the curve    
 
-		-- Draw attack line (vertical)
-		reaper.ImGui_DrawList_AddLine(draw_list, attack_x, attack_y_start, attack_x, attack_y_end, color, thickness)   
+	-- Draw attack line (vertical)
+	reaper.ImGui_DrawList_AddLine(draw_list, attack_x, attack_y_start, attack_x, attack_y_end, color, thickness)   
 
-		-- Draw decay curve (quadratic Bezier)
-		local num_segments = 30  -- Number of segments for the curve (more segments = smoother curve)
-		for i = 0, num_segments do
-				local t = i / num_segments
-				local u = 1 - t
-				-- Calculate the quadratic bezier curve at each segment
-				local px = u * u * decay_x_start + 2 * u * t * control_x + t * t * decay_x_end
-				local py = u * u * decay_y_start + 2 * u * t * control_y + t * t * decay_y_end
-				if i > 0 then
-						reaper.ImGui_DrawList_AddLine(draw_list, prev_px, prev_py, px, py, color, thickness)
-				end
-				prev_px, prev_py = px, py
+	-- Draw decay curve (quadratic Bezier)
+	local num_segments = 30  -- Number of segments for the curve (more segments = smoother curve)
+	for i = 0, num_segments do
+		local t = i / num_segments
+		local u = 1 - t
+		-- Calculate the quadratic bezier curve at each segment
+		local px = u * u * decay_x_start + 2 * u * t * control_x + t * t * decay_x_end
+		local py = u * u * decay_y_start + 2 * u * t * control_y + t * t * decay_y_end
+		if i > 0 then
+				reaper.ImGui_DrawList_AddLine(draw_list, prev_px, prev_py, px, py, color, thickness)
 		end
+		prev_px, prev_py = px, py
+	end
 end
 
 function Midi(draw_list, x, y, width, height, color, thickness)
-		local window_pos_x, window_pos_y = reaper.ImGui_GetCursorScreenPos(ctx)
-		
-		local border = 0
+	local window_pos_x, window_pos_y = reaper.ImGui_GetCursorScreenPos(ctx)
+	
+	local border = 0
 
-		-- Define circle parameters
-		local large_circle_radius = width / 2
-		local small_circle_radius = 1
+	-- Define circle parameters
+	local large_circle_radius = width / 2
+	local small_circle_radius = 1
+	
+	-- Center position for the large circle   
+	local center = {
+		x = x + large_circle_radius + border,
+		y = y + large_circle_radius + border
+	}        
+	
+	-- Draw empty large circle
+	reaper.ImGui_DrawList_AddCircle(draw_list, center.x, center.y, large_circle_radius, color, 32, thickness)
+	
+	-- Draw 5 small filled circles in a semi-circle in the lower part
+	local num_small_circles = 5
+	local pi = math.pi
+	
+	-- We'll draw in the lower semi-circle, from pi/2 to 3pi/2
+	local start_angle = 0
+	local end_angle = pi
+	local angle_step = (end_angle - start_angle) / (num_small_circles - 1)
+	
+	-- Position small circles along the arc in the lower half
+	for i = 0, num_small_circles - 1 do
+		local angle = start_angle + i * angle_step
 		
-		-- Center position for the large circle   
-		local center = {
-				x = x + large_circle_radius + border,
-				y = y + large_circle_radius + border
-		}        
+		-- Position small circles slightly inside the large circle
+		local distance_from_center = large_circle_radius * 0.55
 		
-		-- Draw empty large circle
-		reaper.ImGui_DrawList_AddCircle(draw_list, center.x, center.y, large_circle_radius, color, 32, thickness)
+		local small_circle_pos = {
+			x = center.x + math.cos(angle) * distance_from_center,
+			y = center.y + math.sin(angle) * distance_from_center
+		}
 		
-		-- Draw 5 small filled circles in a semi-circle in the lower part
-		local num_small_circles = 5
-		local pi = math.pi
-		
-		-- We'll draw in the lower semi-circle, from pi/2 to 3pi/2
-		local start_angle = 0
-		local end_angle = pi
-		local angle_step = (end_angle - start_angle) / (num_small_circles - 1)
-		
-		-- Position small circles along the arc in the lower half
-		for i = 0, num_small_circles - 1 do
-				local angle = start_angle + i * angle_step
-				
-				-- Position small circles slightly inside the large circle
-				local distance_from_center = large_circle_radius * 0.55
-				
-				local small_circle_pos = {
-						x = center.x + math.cos(angle) * distance_from_center,
-						y = center.y + math.sin(angle) * distance_from_center
-				}
-				
-				-- Draw filled small circle
-				reaper.ImGui_DrawList_AddCircleFilled(draw_list, small_circle_pos.x, small_circle_pos.y, small_circle_radius, color, 16)
-		end
+		-- Draw filled small circle
+		reaper.ImGui_DrawList_AddCircleFilled(draw_list, small_circle_pos.x, small_circle_pos.y, small_circle_radius, color, 16)
+	end
 end
 
 function Locks(draw_list, x, y, width, height, color, thickness, state, hovered)
 	local outline = false
-		-- Calculate dimensions
-		local lock_width = width * 0.85
-		local lock_height = height * 0.65
-		local shackle_width = lock_width * 0.65
-		local shackle_height = height * 0.35
-		
-		-- Center the lock horizontally
-		local center_x = x + width * 0.5
-		local lock_x = center_x - lock_width * 0.5
-		
-		-- Position the base of the lock at the bottom
-		local lock_y = y + height - lock_height
-		
-		-- Black outline color
-		local outline_color = reaper.ImGui_ColorConvertDouble4ToU32(0.2, 0.2, 0.2, 1)  -- Black color with full alpha
-		local outline_thickness = 1 -- 1 pixel outline
-		
-		-- Draw the body of the lock (rectangle with rounded corners)
-		local rounding = lock_width * 0.2
-		
-		-- First draw the filled shape with the specified color
-		reaper.ImGui_DrawList_AddRectFilled(
-				draw_list,
-				lock_x, lock_y,
-				lock_x + lock_width, lock_y + lock_height,
-				color, rounding
+	-- Calculate dimensions
+	local lock_width = width * 0.85
+	local lock_height = height * 0.65
+	local shackle_width = lock_width * 0.65
+	local shackle_height = height * 0.35
+	
+	-- Center the lock horizontally
+	local center_x = x + width * 0.5
+	local lock_x = center_x - lock_width * 0.5
+	
+	-- Position the base of the lock at the bottom
+	local lock_y = y + height - lock_height
+	
+	-- Black outline color
+	local outline_color = reaper.ImGui_ColorConvertDouble4ToU32(0.2, 0.2, 0.2, 1)  -- Black color with full alpha
+	local outline_thickness = 1 -- 1 pixel outline
+	
+	-- Draw the body of the lock (rectangle with rounded corners)
+	local rounding = lock_width * 0.2
+	
+	-- First draw the filled shape with the specified color
+	reaper.ImGui_DrawList_AddRectFilled(
+		draw_list,
+		lock_x, lock_y,
+		lock_x + lock_width, lock_y + lock_height,
+		color, rounding
+	)
+	
+	if (state == 1 or hovered) and outline then 
+		-- Then draw the outline around the body
+		reaper.ImGui_DrawList_AddRect(
+			draw_list,
+			lock_x, lock_y,
+			lock_x + lock_width, lock_y + lock_height,
+			outline_color, rounding, nil, outline_thickness
 		)
-		
-		if (state == 1 or hovered) and outline then 
-			-- Then draw the outline around the body
-			reaper.ImGui_DrawList_AddRect(
-					draw_list,
-					lock_x, lock_y,
-					lock_x + lock_width, lock_y + lock_height,
-					outline_color, rounding, nil, outline_thickness
-			)
 	end
-		
-		-- Draw curved shackle
-		local shackle_left_x = center_x - shackle_width * 0.5
-		local shackle_right_x = center_x + shackle_width * 0.5
-		local shackle_bottom_y = lock_y
-		local shackle_top_y = lock_y - shackle_height
-		
-		-- Draw shackle fills with the original color
-		-- Left vertical line of shackle
-		if (state == 1 or hovered) then 
-				reaper.ImGui_DrawList_AddLine(
-						draw_list,
-						shackle_left_x, shackle_bottom_y,
-						shackle_left_x, shackle_top_y + shackle_height * 0.3,
-						color, thickness
-				)
-				
-				if outline then
-					-- Add outline to left vertical line
-					reaper.ImGui_DrawList_AddLine(
-							draw_list,
-							shackle_left_x - outline_thickness/2, shackle_bottom_y,
-							shackle_left_x - outline_thickness/2, shackle_top_y + shackle_height * 0.3,
-							outline_color, outline_thickness
-					)
-			end
-		end
-		
-		-- Right vertical line of shackle
+	
+	-- Draw curved shackle
+	local shackle_left_x = center_x - shackle_width * 0.5
+	local shackle_right_x = center_x + shackle_width * 0.5
+	local shackle_bottom_y = lock_y
+	local shackle_top_y = lock_y - shackle_height
+	
+	-- Draw shackle fills with the original color
+	-- Left vertical line of shackle
+	if (state == 1 or hovered) then 
 		reaper.ImGui_DrawList_AddLine(
-				draw_list,
-				shackle_right_x, shackle_bottom_y,
-				shackle_right_x, shackle_top_y + shackle_height * 0.3,
-				color, thickness
+			draw_list,
+			shackle_left_x, shackle_bottom_y,
+			shackle_left_x, shackle_top_y + shackle_height * 0.3,
+			color, thickness
 		)
 		
-	if (state == 1 or hovered) and outline then     
+		if outline then
+			-- Add outline to left vertical line
 			reaper.ImGui_DrawList_AddLine(
-					draw_list,
-					shackle_right_x + outline_thickness/2, shackle_bottom_y,
-					shackle_right_x + outline_thickness/2, shackle_top_y + shackle_height * 0.3,
-					outline_color, outline_thickness
+				draw_list,
+				shackle_left_x - outline_thickness/2, shackle_bottom_y,
+				shackle_left_x - outline_thickness/2, shackle_top_y + shackle_height * 0.3,
+				outline_color, outline_thickness
 			)
-	end
-		
-		-- Curved top part of the shackle
-		local arc_segments = 24  -- Number of segments for smooth arc
-		
-		-- Starting points for the arc
-		local start_x = shackle_left_x
-		local start_y = shackle_bottom_y - shackle_height * 0.7
-		local end_x = shackle_right_x
-		local end_y = shackle_bottom_y - shackle_height * 0.7
-		
-		-- Draw a proper semi-circle connecting the top of the vertical lines
-		local prev_x, prev_y = start_x, start_y
-		
-		-- First draw the filled arc with original color
-		for i = 0, arc_segments do
-				-- Calculate angle for this segment (0 to 180 degrees)
-				local angle = i * (math.pi / arc_segments)
-				
-				-- Calculate point on the arc
-				local curr_x = center_x + (shackle_width * 0.5) * math.cos(angle + math.pi)
-				local curr_y = start_y - shackle_height * 0.3 * math.sin(angle)
-				
-				-- Draw line segment
-				reaper.ImGui_DrawList_AddLine(
-						draw_list,
-						prev_x, prev_y,
-						curr_x, curr_y,
-						color, thickness
-				)
-				
-				prev_x, prev_y = curr_x, curr_y
 		end
+	end
+	
+	-- Right vertical line of shackle
+	reaper.ImGui_DrawList_AddLine(
+		draw_list,
+		shackle_right_x, shackle_bottom_y,
+		shackle_right_x, shackle_top_y + shackle_height * 0.3,
+		color, thickness
+	)
+	
+	if (state == 1 or hovered) and outline then     
+		reaper.ImGui_DrawList_AddLine(
+			draw_list,
+			shackle_right_x + outline_thickness/2, shackle_bottom_y,
+			shackle_right_x + outline_thickness/2, shackle_top_y + shackle_height * 0.3,
+			outline_color, outline_thickness
+		)
+	end
+	
+	-- Curved top part of the shackle
+	local arc_segments = 24  -- Number of segments for smooth arc
+	
+	-- Starting points for the arc
+	local start_x = shackle_left_x
+	local start_y = shackle_bottom_y - shackle_height * 0.7
+	local end_x = shackle_right_x
+	local end_y = shackle_bottom_y - shackle_height * 0.7
+	
+	-- Draw a proper semi-circle connecting the top of the vertical lines
+	local prev_x, prev_y = start_x, start_y
+	
+	-- First draw the filled arc with original color
+	for i = 0, arc_segments do
+		-- Calculate angle for this segment (0 to 180 degrees)
+		local angle = i * (math.pi / arc_segments)
 		
-		-- Now draw the outline arc
-		-- Outer outline
-		if (state == 1 or hovered) and outline then 
-			prev_x, prev_y = start_x, start_y
-			local outer_offset = outline_thickness/2
+		-- Calculate point on the arc
+		local curr_x = center_x + (shackle_width * 0.5) * math.cos(angle + math.pi)
+		local curr_y = start_y - shackle_height * 0.3 * math.sin(angle)
+		
+		-- Draw line segment
+		reaper.ImGui_DrawList_AddLine(
+			draw_list,
+			prev_x, prev_y,
+			curr_x, curr_y,
+			color, thickness
+		)
+		
+		prev_x, prev_y = curr_x, curr_y
+	end
+	
+	-- Now draw the outline arc
+	-- Outer outline
+	if (state == 1 or hovered) and outline then 
+		prev_x, prev_y = start_x, start_y
+		local outer_offset = outline_thickness/2
+		
+		for i = 0, arc_segments do
+			local angle = i * (math.pi / arc_segments)
+			local curr_x = center_x + (shackle_width * 0.5 + outer_offset) * math.cos(angle + math.pi)
+			local curr_y = start_y - (shackle_height * 0.3 + outer_offset) * math.sin(angle)
 			
-			for i = 0, arc_segments do
-					local angle = i * (math.pi / arc_segments)
-					local curr_x = center_x + (shackle_width * 0.5 + outer_offset) * math.cos(angle + math.pi)
-					local curr_y = start_y - (shackle_height * 0.3 + outer_offset) * math.sin(angle)
-					
-					reaper.ImGui_DrawList_AddLine(
-							draw_list,
-							prev_x, prev_y,
-							curr_x, curr_y,
-							outline_color, outline_thickness
-					)
-					
-					prev_x, prev_y = curr_x, curr_y
-			end
+			reaper.ImGui_DrawList_AddLine(
+				draw_list,
+				prev_x, prev_y,
+				curr_x, curr_y,
+				outline_color, outline_thickness
+			)
+			
+			prev_x, prev_y = curr_x, curr_y
+		end
 	end   
 end
 
 function Plus(draw_list, x, y, width, height, color, thickness)
-		-- Use more space - increase the size of the plus
-		local plus_width = width * 0.8
-		local plus_height = height * 0.8
-		
-		-- Center the plus horizontally and vertically
-		local center_x = x + width * 0.5
-		local center_y = y + height * 0.5
-		
-		-- Calculate the positions for the horizontal line
-		local h_line_left_x = center_x - plus_width * 0.5
-		local h_line_right_x = center_x + plus_width * 0.5 + 0.5
-		
-		-- Calculate the positions for the vertical line
-		local v_line_top_y = center_y - plus_height * 0.5
-		local v_line_bottom_y = center_y + plus_height * 0.5
-		
-		-- Draw horizontal rectangle
-		local rect_height = thickness
-		local rect_y = center_y - rect_height * 0.5
-		
-		reaper.ImGui_DrawList_AddRectFilled(
-				draw_list,
-				h_line_left_x, rect_y,
-				h_line_right_x, rect_y + rect_height,
-				color
-		)
-		
-		-- Draw vertical rectangle
-		local rect_width = thickness
-		local rect_x = center_x - rect_width * 0.5
-		
-		reaper.ImGui_DrawList_AddRectFilled(
-				draw_list,
-				rect_x, v_line_top_y,
-				rect_x + rect_width, v_line_bottom_y,
-				color
-		)
+	-- Use more space - increase the size of the plus
+	local plus_width = width * 0.8
+	local plus_height = height * 0.8
+	
+	-- Center the plus horizontally and vertically
+	local center_x = x + width * 0.5
+	local center_y = y + height * 0.5
+	
+	-- Calculate the positions for the horizontal line
+	local h_line_left_x = center_x - plus_width * 0.5
+	local h_line_right_x = center_x + plus_width * 0.5 + 0.5
+	
+	-- Calculate the positions for the vertical line
+	local v_line_top_y = center_y - plus_height * 0.5
+	local v_line_bottom_y = center_y + plus_height * 0.5
+	
+	-- Draw horizontal rectangle
+	local rect_height = thickness
+	local rect_y = center_y - rect_height * 0.5
+	
+	reaper.ImGui_DrawList_AddRectFilled(
+		draw_list,
+		h_line_left_x, rect_y,
+		h_line_right_x, rect_y + rect_height,
+		color
+	)
+	
+	-- Draw vertical rectangle
+	local rect_width = thickness
+	local rect_x = center_x - rect_width * 0.5
+	
+	reaper.ImGui_DrawList_AddRectFilled(
+		draw_list,
+		rect_x, v_line_top_y,
+		rect_x + rect_width, v_line_bottom_y,
+		color
+	)
 end
 
 function DrawIcon(width, height, color, track, fx, param, state, icon)	
@@ -2125,178 +2127,180 @@ end
 
 function GradientButton(ctx, label, x, y, width, height, colorStart, colorEnd, horizontal)
 	local pressed, hovered
-		-- Calculate position
-		local pos_x, pos_y
-		if x == nil or y == nil then
-				pos_x, pos_y = reaper.ImGui_GetCursorScreenPos(ctx)
-		else
-				pos_x, pos_y = x, y
+	-- Calculate position
+	local pos_x, pos_y
+	if x == nil or y == nil then
+			pos_x, pos_y = reaper.ImGui_GetCursorScreenPos(ctx)
+	else
+			pos_x, pos_y = x, y
+	end
+	
+	-- Calculate size
+	local btn_width = width or 100
+	local btn_height = height or 30
+	
+	-- Set up unique ID for the button
+	local id = label .. "##gradient"
+	
+	horizontal = horizontal ~= false     -- Default to horizontal gradient
+	
+	-- Create invisible button for behavior
+	reaper.ImGui_SetCursorScreenPos(ctx, pos_x, pos_y)
+	reaper.ImGui_InvisibleButton(ctx, id, btn_width, btn_height)
+	
+	if reaper.ImGui_IsItemHovered(ctx) then 
+		hovered = true 
+		if reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+			pressed = true
 		end
-		
-		-- Calculate size
-		local btn_width = width or 100
-		local btn_height = height or 30
-		
-		-- Set up unique ID for the button
-		local id = label .. "##gradient"
-		
-		horizontal = horizontal ~= false     -- Default to horizontal gradient
-		
-		-- Create invisible button for behavior
-		reaper.ImGui_SetCursorScreenPos(ctx, pos_x, pos_y)
-		reaper.ImGui_InvisibleButton(ctx, id, btn_width, btn_height)
-		
-		if reaper.ImGui_IsItemHovered(ctx) then 
-			hovered = true 
-			if reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
-				pressed = true
-			end
-		end
+	end
 
-		if pressed then
-			colorStart = colorStart
-			colorEnd = colorEnd
-		elseif hovered then
-				-- colorStart = BrighterColor2(colorStart, 0.2)
-				-- colorEnd = BrighterColor2(colorEnd, 0.2)
-			colorStart = colorStart
-			colorEnd = colorEnd        
-		else
-			colorStart = DarkerColor2(colorStart, 0.1)
-			colorEnd = DarkerColor2(colorEnd, 0.1)
-			-- colorStart = colorStart
-			-- colorEnd = colorEnd
-		end   
-		
-		-- Get the current draw list for rendering
-		local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
+	if pressed then
+		colorStart = colorStart
+		colorEnd = colorEnd
+	elseif hovered then
+			-- colorStart = BrighterColor2(colorStart, 0.2)
+			-- colorEnd = BrighterColor2(colorEnd, 0.2)
+		colorStart = colorStart
+		colorEnd = colorEnd        
+	else
+		colorStart = DarkerColor2(colorStart, 0.1)
+		colorEnd = DarkerColor2(colorEnd, 0.1)
+		-- colorStart = colorStart
+		-- colorEnd = colorEnd
+	end   
+	
+	-- Get the current draw list for rendering
+	local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
 
-		-- Rounding for corners
-		local rounding = 4.0
-		
-		-- Draw gradient background
-		if horizontal then
-				reaper.ImGui_DrawList_AddRectFilledMultiColor(
-						draw_list,
-						pos_x, pos_y, pos_x + btn_width, pos_y + btn_height,
-						colorStart, colorEnd, colorEnd, colorStart
-				)
-		else
-				reaper.ImGui_DrawList_AddRectFilledMultiColor(
-						draw_list,
-						pos_x, pos_y, pos_x + btn_width, pos_y + btn_height,
-						colorStart, colorStart, colorEnd, colorEnd
-				)
-		end   
-		
-		-- Draw text label
-		local text_width = reaper.ImGui_CalcTextSize(ctx, label)
-		local text_pos_x = pos_x + (btn_width - text_width) * 0.5
-		local text_pos_y = pos_y + (btn_height - reaper.ImGui_GetTextLineHeight(ctx)) * 0.5
-		
-		-- Draw text
-		text_color = BrighterColor2(white, 0.2)
-		reaper.ImGui_DrawList_AddText(draw_list, text_pos_x, text_pos_y, text_color, label)
-		
-		-- Reset cursor position
-		-- reaper.ImGui_SetCursorScreenPos(ctx, pos_x, pos_y + btn_height + 2)
-		
-		return pressed
+	-- Rounding for corners
+	local rounding = 4.0
+	
+	-- Draw gradient background
+	if horizontal then
+		reaper.ImGui_DrawList_AddRectFilledMultiColor(
+			draw_list,
+			pos_x, pos_y, pos_x + btn_width, pos_y + btn_height,
+			colorStart, colorEnd, colorEnd, colorStart
+		)
+	else
+		reaper.ImGui_DrawList_AddRectFilledMultiColor(
+			draw_list,
+			pos_x, pos_y, pos_x + btn_width, pos_y + btn_height,
+			colorStart, colorStart, colorEnd, colorEnd
+		)
+	end   
+	
+	-- Draw text label
+	local text_width = reaper.ImGui_CalcTextSize(ctx, label)
+	local text_pos_x = pos_x + (btn_width - text_width) * 0.5
+	local text_pos_y = pos_y + (btn_height - reaper.ImGui_GetTextLineHeight(ctx)) * 0.5
+	
+	-- Draw text
+	text_color = BrighterColor2(white, 0.2)
+	reaper.ImGui_DrawList_AddText(draw_list, text_pos_x, text_pos_y, text_color, label)
+	
+	-- Reset cursor position
+	-- reaper.ImGui_SetCursorScreenPos(ctx, pos_x, pos_y + btn_height + 2)
+	
+	return pressed
 end
 
 -- Custom Collapsing Header function
 function CustomCollapsingHeader(ctx, id, label, width, height, rounding)
 	local hovered, clicked
-		local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
-		local x, y = reaper.ImGui_GetCursorPos(ctx)
-		local pos_x, pos_y = reaper.ImGui_GetCursorScreenPos(ctx)    
-		pos_x = pos_x - win_padding_x
-		local padding = 7
-		local padding_text = 24
+	local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
+	local x, y = reaper.ImGui_GetCursorPos(ctx)
+	local pos_x, pos_y = reaper.ImGui_GetCursorScreenPos(ctx)    
+	pos_x = pos_x - win_padding_x
+	local padding = 7
+	local padding_text = 24
 
-		-- Initialize header state if needed
-		if custom_headers[id] == nil then custom_headers[id] = false end
-		local is_open = custom_headers[id]
+	-- Initialize header state if needed
+	if custom_headers[id] == nil then custom_headers[id] = false end
+	local is_open = custom_headers[id]
 
-		-- Click detection
-		reaper.ImGui_SetCursorPos(ctx, x, y) -- Reset cursor for button area
-		reaper.ImGui_InvisibleButton(ctx, id, x + width - win_padding_x - 8, y + height * 0.5 - win_padding_y)
+	-- Click detection
+	reaper.ImGui_SetCursorPos(ctx, x, y) -- Reset cursor for button area
+	reaper.ImGui_InvisibleButton(ctx, id, x + width - win_padding_x - 8, y + height * 0.5 - win_padding_y)
 
-		if reaper.ImGui_IsItemHovered(ctx) then
-			hovered = true
-			if reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
-				clicked = true
-					custom_headers[id] = not custom_headers[id]
-				end
+	if reaper.ImGui_IsItemHovered(ctx) then
+		hovered = true
+		if reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+			clicked = true
+			custom_headers[id] = not custom_headers[id]
 		end
+	end
 
-		local color
-		if clicked then
-			color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 0.5)
-		elseif hovered then
-			color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 0.6)
-		else
-			color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 0.25)
-		end
+	local color
+	if clicked then
+		color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 0.5)
+	elseif hovered then
+		color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 0.6)
+	else
+		color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 0.25)
+	end
 
-		-- Draw header background with rounded corners
-		reaper.ImGui_DrawList_AddRectFilled(draw_list, pos_x, pos_y, pos_x + width, pos_y + height, color, rounding, reaper.ImGui_DrawFlags_RoundCornersBottomLeft())
+	-- Draw header background with rounded corners
+	reaper.ImGui_DrawList_AddRectFilled(draw_list, pos_x, pos_y, pos_x + width, pos_y + height, color, rounding, reaper.ImGui_DrawFlags_RoundCornersBottomLeft())
 
-		-- Triangle indicator position
-		local tri_size = 8
-		local tri_x = pos_x + padding
-		local tri_y = pos_y + height * 0.5
-		local tri_color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 1) -- White color
+	-- Triangle indicator position
+	local tri_size = 8
+	local tri_x = pos_x + padding
+	local tri_y = pos_y + height * 0.5
+	local tri_color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 1) -- White color
 
-		-- Draw triangle indicator
-		if is_open then
-				-- Downward triangle (expanded)
-				reaper.ImGui_DrawList_AddTriangleFilled(draw_list,
-						tri_x, tri_y - tri_size * 0.5,
-						tri_x + tri_size, tri_y - tri_size * 0.5,
-						tri_x + tri_size * 0.5, tri_y + tri_size * 0.5,
-						tri_color)
-		else
-				-- Right-facing triangle (collapsed)
-				reaper.ImGui_DrawList_AddTriangleFilled(draw_list,
-						tri_x, tri_y - tri_size * 0.5,
-						tri_x + tri_size, tri_y,
-						tri_x, tri_y + tri_size * 0.5,
-						tri_color)
-		end
+	-- Draw triangle indicator
+	if is_open then
+		-- Downward triangle (expanded)
+		reaper.ImGui_DrawList_AddTriangleFilled(draw_list,
+			tri_x, tri_y - tri_size * 0.5,
+			tri_x + tri_size, tri_y - tri_size * 0.5,
+			tri_x + tri_size * 0.5, tri_y + tri_size * 0.5,
+			tri_color)
+	else
+		-- Right-facing triangle (collapsed)
+		reaper.ImGui_DrawList_AddTriangleFilled(draw_list,
+			tri_x, tri_y - tri_size * 0.5,
+			tri_x + tri_size, tri_y,
+			tri_x, tri_y + tri_size * 0.5,
+			tri_color)
+	end
 
-		-- Draw text label
-		reaper.ImGui_SetCursorPosX(ctx, padding_text + tri_size)
-		reaper.ImGui_SetCursorPosY(ctx, y + (height * 0.5) - reaper.ImGui_GetTextLineHeight(ctx) * 0.5)
-		reaper.ImGui_Text(ctx, label)
+	-- Draw text label
+	reaper.ImGui_SetCursorPosX(ctx, padding_text + tri_size)
+	reaper.ImGui_SetCursorPosY(ctx, y + (height * 0.5) - reaper.ImGui_GetTextLineHeight(ctx) * 0.5)
+	reaper.ImGui_Text(ctx, label)
 
-		-- Move cursor down to prevent overlap
-		reaper.ImGui_SetCursorPosY(ctx, y + height + 2)
+	-- Move cursor down to prevent overlap
+	reaper.ImGui_SetCursorPosY(ctx, y + height + 2)
 
-		return custom_headers[id]
+	return custom_headers[id]
 end
 
 function DrawLock(width, height, color, rounding, param_lock, track, fx, param)
 	local hovered
-		local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
-		local pos_x, pos_y = reaper.ImGui_GetCursorScreenPos(ctx)  
+	local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
+	local pos_x, pos_y = reaper.ImGui_GetCursorScreenPos(ctx)  
 
-		-- Click detection
-		reaper.ImGui_InvisibleButton(ctx, "##lock_button", width - 7, height)
+	-- Click detection
+	reaper.ImGui_InvisibleButton(ctx, "##lock_button", width - 7, height)
 
-		if reaper.ImGui_IsItemHovered(ctx) then
-			hovered = true    	
-			if reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
-					param_lock = 1 - param_lock
-					rv_param_lock = true
+	if reaper.ImGui_IsItemHovered(ctx) then
+		hovered = true    	
+		if reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+			param_lock = 1 - param_lock
+			rv_param_lock = true
 
-					-- Set the locked parameter as the last-touched one
-					local current_val = reaper.TrackFX_GetParam(track, fx, param)
-					reaper.TrackFX_SetParam(track, fx, param, current_val)
-				end
+			if param_lock == 0 and t_last_param.param then
+				-- Set the locked parameter as the last-touched one
+				local current_val = reaper.TrackFX_GetParam(track, fx, param)
+				reaper.TrackFX_SetParam(track, fx, param, current_val)
+			end
 		end
+	end
 
-		local lock_color, bg_color
+	local lock_color, bg_color
 	if hovered then 
 		bg_color = track_color
 		lock_color = reaper.ImGui_ColorConvertDouble4ToU32(0.3, 0.3, 0.3, 1)
@@ -2304,14 +2308,14 @@ function DrawLock(width, height, color, rounding, param_lock, track, fx, param)
 		bg_color = BrighterColor2(track_color, 0.1)
 		lock_color = reaper.ImGui_ColorConvertDouble4ToU32(0.1, 0.1, 0.1, 1)
 	else
-			bg_color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 0.25)
+		bg_color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 0.25)
 		lock_color = reaper.ImGui_ColorConvertDouble4ToU32(0.8, 0.8, 0.8, 1)    	    	
-		end
+	end
 
-		-- Draw header background
-		reaper.ImGui_DrawList_AddRectFilled(draw_list, pos_x, pos_y, pos_x + width, pos_y + height, bg_color, rounding, reaper.ImGui_DrawFlags_RoundCornersBottom())    	
+	-- Draw header background
+	reaper.ImGui_DrawList_AddRectFilled(draw_list, pos_x, pos_y, pos_x + width, pos_y + height, bg_color, rounding, reaper.ImGui_DrawFlags_RoundCornersBottom())    	
 
-		-- Draw lock icon
+	-- Draw lock icon
 	Locks(draw_list, pos_x + width * 0.2, pos_y + 2, 13, height - 4, lock_color, 2, param_lock, hovered)
 	ToolTip("Lock Flashmob")
 
@@ -2320,36 +2324,36 @@ end
 
 function DrawAddInstance(width, height, color, track, rounding)
 	local hovered
-		local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
-		local pos_x, pos_y = reaper.ImGui_GetCursorScreenPos(ctx)  
+	local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
+	local pos_x, pos_y = reaper.ImGui_GetCursorScreenPos(ctx)  
 
-		-- Click detection
-		reaper.ImGui_InvisibleButton(ctx, "##add_button", width - 7, height)
+	-- Click detection
+	reaper.ImGui_InvisibleButton(ctx, "##add_button", width - 7, height)
 
-		if reaper.ImGui_IsItemHovered(ctx) then
-			hovered = true    	
-			if reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
-			reaper.TrackFX_AddByName(track, "../Scripts/ME/Flashmob_2/Flashmob.RfxChain", false, 1000)	-- last argument adds an instance if one is not found at the first FX chain index				
-			mod_container_id = reaper.TrackFX_GetCount(track) - 1
-			mod_container_table_id = mod_container_table_id + 1
-			reaper.GetSetMediaTrackInfo_String(track, "P_EXT:vf_flashmob_last_instance", mod_container_id .. "," .. mod_container_table_id, 1)
-			reload_settings = true
-				end
-		end
+	if reaper.ImGui_IsItemHovered(ctx) then
+		hovered = true    	
+		if reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+		reaper.TrackFX_AddByName(track, "../Scripts/ME/Flashmob_2/Flashmob.RfxChain", false, 1000)	-- last argument adds an instance if one is not found at the first FX chain index				
+		mod_container_id = reaper.TrackFX_GetCount(track) - 1
+		mod_container_table_id = mod_container_table_id + 1
+		reaper.GetSetMediaTrackInfo_String(track, "P_EXT:vf_flashmob_last_instance", mod_container_id .. "," .. mod_container_table_id, 1)
+		reload_settings = true
+			end
+	end
 
-		local plus_color, bg_color
+	local plus_color, bg_color
 	if hovered then 
 		bg_color = track_color
 		plus_color = reaper.ImGui_ColorConvertDouble4ToU32(0.3, 0.3, 0.3, 1)
 	else
-			bg_color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 0.25)
+		bg_color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 0.25)
 		plus_color = reaper.ImGui_ColorConvertDouble4ToU32(0.8, 0.8, 0.8, 1)    	    	
-		end
+	end
 
-		-- Draw header background
-		reaper.ImGui_DrawList_AddRectFilled(draw_list, pos_x, pos_y, pos_x + width, pos_y + height, bg_color, rounding, reaper.ImGui_DrawFlags_RoundCornersBottomRight())    	
+	-- Draw header background
+	reaper.ImGui_DrawList_AddRectFilled(draw_list, pos_x, pos_y, pos_x + width, pos_y + height, bg_color, rounding, reaper.ImGui_DrawFlags_RoundCornersBottomRight())    	
 
-		-- Draw lock icon
+	-- Draw lock icon
 	Plus(draw_list, pos_x + width * 0.2, pos_y + 2, 13, height - 4, plus_color, 3)
 	ToolTip("Add Flashmob Instance")
 end
@@ -2559,7 +2563,8 @@ function Frame()
 		if track_name_clipped ~= track_name then ToolTip(track_name) end		
 
 		-- Draw small x button to close the window
-		if reaper.ImGui_IsMouseHoveringRect(ctx, rect_x - win_padding_x, rect_y - win_padding_y, (rect_x - win_padding_x) + width, (rect_y - win_padding_y) + text_h + 4) then
+		-- if reaper.ImGui_IsMouseHoveringRect(ctx, rect_x - win_padding_x, rect_y - win_padding_y, (rect_x - win_padding_x) + width, (rect_y - win_padding_y) + text_h + 4) then
+		if reaper.ImGui_IsMouseHoveringRect(ctx, rect_x, rect_y, rect_x + width, rect_y + height) then
 			local x_color = reaper.ImGui_ColorConvertDouble4ToU32(0, 0, 0, 0.7)
 
 			if reaper.ImGui_IsMouseHoveringRect(ctx, rect_x + width - 28, rect_y - 4, rect_x + width - 28 + 18, rect_y - 4 + text_h + 4) then

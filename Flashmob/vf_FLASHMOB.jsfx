@@ -1,20 +1,22 @@
 desc: FLASHMOB - Flexible Modulation system for Reaper by Vincent Fliniaux
 
-slider1:0<0, 100, 0.001>Macro 1
-slider2:0<0, 100, 0.001>Macro 2
-slider3:0<0, 100, 0.001>Macro 3
-slider4:0<0, 100, 0.001>Macro 4
-slider5:0<0, 100, 0.001>Macro 5
-slider6:0<0, 100, 0.001>Macro 6
-slider7:0<0, 100, 0.001>Macro 7
-slider8:0<0, 100, 0.001>Macro 8
+//noindex: true
 
-slider9:0<0,1>-Mod1
-slider10:0<0,1>-Mod2
-slider11:0<0,1>-Mod3
-slider12:0<0,1>-Mod4
-slider13:0<0,1>-Mod5
-slider14:0<0,1>-Mod6
+slider1:0<0, 100, 0.001>MACRO 1
+slider2:0<0, 100, 0.001>MACRO 2
+slider3:0<0, 100, 0.001>MACRO 3
+slider4:0<0, 100, 0.001>MACRO 4
+slider5:0<0, 100, 0.001>MACRO 5
+slider6:0<0, 100, 0.001>MACRO 6
+slider7:0<0, 100, 0.001>MACRO 7
+slider8:0<0, 100, 0.001>MACRO 8
+
+slider9:0<0,1>-MOD 1
+slider10:0<0,1>-MOD 2
+slider11:0<0,1>-MOD 3
+slider12:0<0,1>-MOD 4
+slider13:0<0,1>-MOD 5
+slider14:0<0,1>-MOD 6
 
 
 

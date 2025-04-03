@@ -1,5 +1,7 @@
 desc: vf_FLASHMOB_GEN - DO NOT DELETE
 
+//noindex: true
+
 in_pin:left input
 in_pin:right input
 out_pin:left output
