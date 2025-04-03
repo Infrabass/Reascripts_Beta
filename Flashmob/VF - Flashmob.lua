@@ -2,9 +2,10 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.2.6
+-- @Version 0.2.7
 -- @Changelog
---   Fix for Nono
+--   Use another method to link the script and the FX
+--   Fix macro names
 -- @Provides
 --   [main] VF - Flashmob.lua
 --   Flashmob.RfxChain
@@ -36,7 +37,11 @@ Full Changelog:
 	v0.2.4
 		+ Fix for Nono				
 	v0.2.6
-		+ Small fix						
+		+ Small fix	
+	v0.2.7
+		+ Use another method to link the script and the FX
+		+ Fix macro names
+
 
 ]]
 
@@ -226,8 +231,8 @@ function GetFlashmobInstances(track, target_fx_name)
 		local retval, fx_type = reaper.TrackFX_GetNamedConfigParm(track, fx_id, "fx_type")
 		if fx_type == "Container" then
 			local first_subfx_id = 0x2000000 + ((0 + 1) * (fx_count + 1)) + (fx_id + 1) -- (index of FX in container + 1) * (fxchain count + 1) + (index of container + 1)		
-			local retval, fx_name = reaper.TrackFX_GetFXName(track, first_subfx_id, "")
-			if retval and fx_name:find(target_fx_name) then
+			local retval, file_name = reaper.TrackFX_GetNamedConfigParm(track, first_subfx_id, "fx_ident")
+			if retval and file_name:find(target_fx_name) then
 				t_flashmob_id[#t_flashmob_id+1] = fx_id
 				find_Flashmob = true
 			end
