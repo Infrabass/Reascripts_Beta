@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="VF_Reascripts Beta" commit="ea2d58b111eafd533163895f1472e3595d47c855">
+<index version="1" name="VF_Reascripts Beta" commit="6e5551fe76a23fbef9a790df17ccb408babaaa4c">
   <category name="Flashmob">
     <reapack name="VF - Flashmob.lua" type="script">
       <metadata>
@@ -96,6 +96,16 @@ Fix macro names]]></changelog>
         <source file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/ea2d58b111eafd533163895f1472e3595d47c855/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
         <source type="effect" file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/ea2d58b111eafd533163895f1472e3595d47c855/Flashmob/vf_FLASHMOB.jsfx</source>
         <source type="effect" file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/ea2d58b111eafd533163895f1472e3595d47c855/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
+      </version>
+      <version name="0.2.8" author="Vincent Fliniaux (Infrabass)" time="2025-04-03T05:21:28Z">
+        <changelog><![CDATA[fix a bug with the lock feature
+Add tag to JSFX]]></changelog>
+        <source main="main">https://github.com/Infrabass/Reascripts_Beta/raw/6e5551fe76a23fbef9a790df17ccb408babaaa4c/Flashmob/VF%20-%20Flashmob.lua</source>
+        <source file="Flashmob.RfxChain">https://github.com/Infrabass/Reascripts_Beta/raw/6e5551fe76a23fbef9a790df17ccb408babaaa4c/Flashmob/Flashmob.RfxChain</source>
+        <source file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/6e5551fe76a23fbef9a790df17ccb408babaaa4c/Flashmob/vf_FLASHMOB.jsfx</source>
+        <source file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/6e5551fe76a23fbef9a790df17ccb408babaaa4c/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
+        <source type="effect" file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/6e5551fe76a23fbef9a790df17ccb408babaaa4c/Flashmob/vf_FLASHMOB.jsfx</source>
+        <source type="effect" file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/6e5551fe76a23fbef9a790df17ccb408babaaa4c/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
       </version>
     </reapack>
   </category>
