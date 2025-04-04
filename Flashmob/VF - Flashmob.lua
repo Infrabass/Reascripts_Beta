@@ -2,10 +2,10 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.2.8
+-- @Version 0.2.9
 -- @Changelog
---   fix a bug with the lock feature
---   Add tag to JSFX
+--   fix a crash when showing macro assignations
+--   fix adding another instance of Flashmob of the selected track
 -- @Provides
 --   [main] VF - Flashmob.lua
 --   Flashmob.RfxChain
@@ -18,6 +18,7 @@
 --   
 --   ## Dependencies
 --   - Requires ReaImGui
+--   - Requires [Snap Heap](https://kilohearts.com/products/snap_heap) from Kilohearts
 
 
 --[[
@@ -44,6 +45,9 @@ Full Changelog:
 	v0.2.8
 		+ fix a bug with the lock feature
 		+ Add tag to JSFX
+	v0.2.9
+		+ fix a crash when showing macro assignations
+		+ fix adding another instance of Flashmob of the selected track
 
 
 ]]
@@ -1157,7 +1161,7 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 				-- Draw the text with the determined color
 				reaper.ImGui_SameLine(ctx)
 				reaper.ImGui_SetCursorPos(ctx, x, y)
-				reaper.ImGui_SetItemAllowOverlap(ctx)
+				reaper.ImGui_SetNextItemAllowOverlap(ctx)				
 				reaper.ImGui_TextColored(ctx, assignation_color, t_assignations[i].param_name)
 
 				reaper.ImGui_SameLine(ctx)
@@ -1295,7 +1299,7 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 				-- Draw the text with the determined color
 				reaper.ImGui_SameLine(ctx)
 				reaper.ImGui_SetCursorPos(ctx, x, y)
-				reaper.ImGui_SetItemAllowOverlap(ctx)
+				reaper.ImGui_SetNextItemAllowOverlap(ctx)				
 				reaper.ImGui_TextColored(ctx, assignation_color, t_assignations[i].param_name)
 
 				reaper.ImGui_SameLine(ctx)
@@ -2333,7 +2337,7 @@ function DrawAddInstance(width, height, color, track, rounding)
 	if reaper.ImGui_IsItemHovered(ctx) then
 		hovered = true    	
 		if reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
-		reaper.TrackFX_AddByName(track, "../Scripts/ME/Flashmob_2/Flashmob.RfxChain", false, 1000)	-- last argument adds an instance if one is not found at the first FX chain index				
+		reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts Beta/Flashmob/Flashmob.RfxChain", false, 1000)	-- last argument adds an instance if one is not found at the first FX chain index								
 		mod_container_id = reaper.TrackFX_GetCount(track) - 1
 		mod_container_table_id = mod_container_table_id + 1
 		reaper.GetSetMediaTrackInfo_String(track, "P_EXT:vf_flashmob_last_instance", mod_container_id .. "," .. mod_container_table_id, 1)
