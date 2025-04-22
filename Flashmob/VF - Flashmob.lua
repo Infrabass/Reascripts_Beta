@@ -2,7 +2,7 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.3.1
+-- @Version 0.3.2
 -- @Changelog
 --   Fix missing pngs
 -- @Provides
@@ -1526,9 +1526,7 @@ function DrawMIDILearn(track, fx, param)
 			reaper.TrackFX_SetParam(track, fx, param, current_val) -- Safety to set as last touched FX parameter
 			-- reaper.SetCursorContext(1) -- Set focus back to arrange
 			-- reaper.ImGui_SetKeyboardFocusHere(ctx)
-			reaper_modal = true
 			Command(41144) -- FX: Set MIDI learn for last touched FX parameter
-			reaper_modal = nil
 			GetPMData(track, fx, param)
 		end
 
@@ -2538,7 +2536,7 @@ function Init()
 	macro_mod_enable = 0
 	help_page = 0
 	settings_page = 0
-	reaper_modal = nil
+	-- reaper_modal = nil
 
 	-- Load Images	
 	img_lock_off = reaper.ImGui_CreateImage(script_path .. "Icons/" .. "Lock_off.png")
@@ -3599,14 +3597,14 @@ function Loop()
 
 	SetTheme()
 
-	-- local main_window_flags = reaper.ImGui_WindowFlags_NoCollapse() | reaper.ImGui_WindowFlags_TopMost() | reaper.ImGui_WindowFlags_NoFocusOnAppearing() | reaper.ImGui_WindowFlags_NoTitleBar()
-	local main_window_flags = reaper.ImGui_WindowFlags_NoCollapse() | reaper.ImGui_WindowFlags_NoFocusOnAppearing() | reaper.ImGui_WindowFlags_NoTitleBar()
+	local main_window_flags = reaper.ImGui_WindowFlags_NoCollapse() | reaper.ImGui_WindowFlags_TopMost() | reaper.ImGui_WindowFlags_NoFocusOnAppearing() | reaper.ImGui_WindowFlags_NoTitleBar()
+	-- local main_window_flags = reaper.ImGui_WindowFlags_NoCollapse() | reaper.ImGui_WindowFlags_NoFocusOnAppearing() | reaper.ImGui_WindowFlags_NoTitleBar()
 	if not reaper.ImGui_IsWindowDocked(ctx) then
 		main_window_flags = main_window_flags | reaper.ImGui_WindowFlags_NoScrollbar()
 	end
-	if not reaper_modal then
-		main_window_flags = main_window_flags | reaper.ImGui_WindowFlags_TopMost()
-	end
+	-- if not reaper_modal then
+	-- 	main_window_flags = main_window_flags | reaper.ImGui_WindowFlags_TopMost()
+	-- end
 
 	-- visible, open = reaper.ImGui_Begin(ctx, 'FLASHMOB', true, reaper.ImGui_WindowFlags_NoCollapse() | reaper.ImGui_WindowFlags_NoResize() | reaper.ImGui_WindowFlags_NoDocking())	
 	visible, open = reaper.ImGui_Begin(ctx, 'FLASHMOB', true, main_window_flags)
