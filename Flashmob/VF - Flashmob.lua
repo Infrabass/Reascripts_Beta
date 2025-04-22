@@ -2,20 +2,15 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.3
+-- @Version 0.3.1
 -- @Changelog
---   Use graphics instead of drawing shapes for icons
---   Add a line of buttons above LAST FX PARAM (Settings, Help, Enable Macro Modulation, Lock, Add Instance)
---   Fix bug: Macro slider modulated by another FLASHMOB move their offset instead of the mod range
---   By default, tweaking MACROS don't update the last-touched FX param. Add a button to activate the MACROS MODULATION
---   Set border color to MOD or MACRO linked to last-touched FX param
---   Add message or color when no mod amount
---   Improve the error message when trying to map a MACRO to itself
+--   Fix missing pngs
 -- @Provides
 --   [main] VF - Flashmob.lua
 --   Flashmob.RfxChain
 --   vf_FLASHMOB.jsfx
 --   vf_FLASHMOB_GEN.jsfx
+--   Icons/*.png
 --   [effect] vf_FLASHMOB.jsfx
 --   [effect] vf_FLASHMOB_GEN.jsfx
 -- @About 
@@ -66,6 +61,8 @@ Full Changelog:
 		+ Set border color to MOD or MACRO linked to last-touched FX param
 		+ Add message or color when no mod amount
 		+ Improve the error message when trying to map a MACRO to itself	
+	v0.3.1
+		+ Fix missing pngs
 
 
 ]]
