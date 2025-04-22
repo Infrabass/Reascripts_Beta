@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="VF_Reascripts Beta" commit="3643a91fcbf00791d070d54ee9e54628cf6751a9">
+<index version="1" name="VF_Reascripts Beta" commit="eab045762a568ae92c152ce7a9533b100c0883c8">
   <category name="Flashmob">
     <reapack name="VF - Flashmob.lua" type="script">
       <metadata>
@@ -120,6 +120,18 @@ fix adding another instance of Flashmob of the selected track]]></changelog>
         <source file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/3643a91fcbf00791d070d54ee9e54628cf6751a9/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
         <source type="effect" file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/3643a91fcbf00791d070d54ee9e54628cf6751a9/Flashmob/vf_FLASHMOB.jsfx</source>
         <source type="effect" file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/3643a91fcbf00791d070d54ee9e54628cf6751a9/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
+      </version>
+      <version name="0.2.10" author="Vincent Fliniaux (Infrabass)" time="2025-04-21T07:38:46Z">
+        <changelog><![CDATA[Add more info for the user in the Snapheap presets
+Improve UI
+Prepare buttons for future update
+If Snapheap is missing, let the user use Flashmob for the MACROS & the NATIVE tabs and only disable the MODS tab]]></changelog>
+        <source main="main">https://github.com/Infrabass/Reascripts_Beta/raw/eab045762a568ae92c152ce7a9533b100c0883c8/Flashmob/VF%20-%20Flashmob.lua</source>
+        <source file="Flashmob.RfxChain">https://github.com/Infrabass/Reascripts_Beta/raw/eab045762a568ae92c152ce7a9533b100c0883c8/Flashmob/Flashmob.RfxChain</source>
+        <source file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/eab045762a568ae92c152ce7a9533b100c0883c8/Flashmob/vf_FLASHMOB.jsfx</source>
+        <source file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/eab045762a568ae92c152ce7a9533b100c0883c8/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
+        <source type="effect" file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/eab045762a568ae92c152ce7a9533b100c0883c8/Flashmob/vf_FLASHMOB.jsfx</source>
+        <source type="effect" file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/eab045762a568ae92c152ce7a9533b100c0883c8/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
       </version>
     </reapack>
   </category>
