@@ -23,7 +23,7 @@
 --   
 --   ## Dependencies
 --   - Requires ReaImGui
---   - Requires [Snap Heap](https://kilohearts.com/products/snap_heap) from Kilohearts
+--   - Requires [Snap Heap](https://kilohearts.com/products/snap_heap) from Kilohearts (but MACROS and NATIVE MOD are usable without)
 
 
 --[[
