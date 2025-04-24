@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="VF_Reascripts Beta" commit="928a89600318058306089b4f06d9414bd28630e4">
+<index version="1" name="VF_Reascripts Beta" commit="d1b361bf2c538e72e2c0045f972e931a67b16056">
   <category name="Flashmob">
     <reapack name="VF - Flashmob.lua" type="script">
       <metadata>
@@ -13,7 +13,7 @@
 {\pard \ql \f0 \sa0 \li360 \fi-360 \bullet \tx360\tab Requires {\field{\*\fldinst{HYPERLINK "https://kilohearts.com/products/snap_heap"}}{\fldrslt{\ul
 Snap Heap
 }}}
- from Kilohearts\sa180\par}
+ from Kilohearts (but MACROS and NATIVE MOD are usable without)\sa180\par}
 }
 ]]></description>
         <link rel="website">https://github.com/Infrabass/Reascripts_Beta</link>
@@ -195,6 +195,35 @@ Improve the error message when trying to map a MACRO to itself]]></changelog>
         <source file="Icons/Settings_on.png">https://github.com/Infrabass/Reascripts_Beta/raw/928a89600318058306089b4f06d9414bd28630e4/Flashmob/Icons/Settings_on.png</source>
         <source type="effect" file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/928a89600318058306089b4f06d9414bd28630e4/Flashmob/vf_FLASHMOB.jsfx</source>
         <source type="effect" file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/928a89600318058306089b4f06d9414bd28630e4/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
+      </version>
+      <version name="0.3.3" author="Vincent Fliniaux (Infrabass)" time="2025-04-23T19:00:38Z">
+        <changelog><![CDATA[Add blinking effect to MOD AMOUNT at 0% to give a better visual feedback
+Add tab indicator line for active modulation to give a better visual feedback
+In assignation lists, add the possibility open FX by clicking on the FX name
+CMD(Mac)/CTRL(PC) + click to open FX in alternate mode (behaviour set in script settings)
+When opening MOD assignation lists, auto-enable modulation mapping for MACRO so they can be selected like other FX parameters
+Attempt to fix the Reaper modal window bug on Windows]]></changelog>
+        <source main="main">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/VF%20-%20Flashmob.lua</source>
+        <source file="Flashmob.RfxChain">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Flashmob.RfxChain</source>
+        <source file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/vf_FLASHMOB.jsfx</source>
+        <source file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
+        <source file="Icons/AddInstance_hover.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/AddInstance_hover.png</source>
+        <source file="Icons/AddInstance_off.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/AddInstance_off.png</source>
+        <source file="Icons/Help_hover.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/Help_hover.png</source>
+        <source file="Icons/Help_off.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/Help_off.png</source>
+        <source file="Icons/Help_on.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/Help_on.png</source>
+        <source file="Icons/Lock_hover.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/Lock_hover.png</source>
+        <source file="Icons/Lock_off.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/Lock_off.png</source>
+        <source file="Icons/Lock_on.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/Lock_on.png</source>
+        <source file="Icons/MacroMod_hover.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/MacroMod_hover.png</source>
+        <source file="Icons/MacroMod_off.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/MacroMod_off.png</source>
+        <source file="Icons/MacroMod_off_disabled.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/MacroMod_off_disabled.png</source>
+        <source file="Icons/MacroMod_on.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/MacroMod_on.png</source>
+        <source file="Icons/Settings_hover.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/Settings_hover.png</source>
+        <source file="Icons/Settings_off.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/Settings_off.png</source>
+        <source file="Icons/Settings_on.png">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/Icons/Settings_on.png</source>
+        <source type="effect" file="vf_FLASHMOB.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/vf_FLASHMOB.jsfx</source>
+        <source type="effect" file="vf_FLASHMOB_GEN.jsfx">https://github.com/Infrabass/Reascripts_Beta/raw/c8417432a4a33e9aeb678b8bc85795a6f94a465d/Flashmob/vf_FLASHMOB_GEN.jsfx</source>
       </version>
     </reapack>
   </category>
