@@ -591,12 +591,12 @@ function FindParamID(track, fx, param_name)
 end
 
 function LinkParam(track, touched_fx, fx, touched_param, param, new_baseline, param_is_linked_to_anything, show_track_control)
-	if param_is_linked_to_anything == 1 then	
-		local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped.\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
-		if user_input_overwrite == 7 then -- NO
-			return
-		end
-	end
+	-- if param_is_linked_to_anything == 1 then	
+	-- 	local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped.\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
+	-- 	if user_input_overwrite == 7 then -- NO
+	-- 		return
+	-- 	end
+	-- end
 	reaper.TrackFX_SetNamedConfigParm(track, touched_fx, "param." .. touched_param .. ".plink.effect", fx)
 	reaper.TrackFX_SetNamedConfigParm(track, touched_fx, "param." .. touched_param .. ".plink.param", param)
 	reaper.TrackFX_SetNamedConfigParm(track, touched_fx, "param." .. touched_param .. ".plink.active", 1)
@@ -1248,21 +1248,57 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 		-- reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Button(), t_color_palette[index])
 		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonHovered(), BrighterColor(t_color_palette[index]))
 		reaper.ImGui_PushFont(ctx, fonts.medium_bold)
+		local link_confirmed
 		if reaper.ImGui_Button(ctx, "MOD\n   " .. index, 40, 60) then
 			if t_last_param.param then	
 
-				-- Keep parameter current value if no native modulation is active
-				local new_baseline
-				if t_pm_data.lfo_active == 1 or t_pm_data.acs_active == 1 then
-					new_baseline = t_pm_data.baseline
-				else				
-					new_baseline = reaper.TrackFX_GetParam(track, t_last_param.fx, t_last_param.param)
+				-- -- Keep parameter current value if no native modulation is active
+				-- local new_baseline
+				-- if t_pm_data.lfo_active == 1 or t_pm_data.acs_active == 1 then
+				-- 	new_baseline = t_pm_data.baseline
+				-- else				
+				-- 	new_baseline = reaper.TrackFX_GetParam(track, t_last_param.fx, t_last_param.param)
+				-- end
+
+				if param_is_linked_to_anything == 1 then
+					if user_os == "Win" then
+						StartModalWorkaround("mod_overwrite")
+					else	
+						local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped.\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
+						if user_input_overwrite == 6 then -- YES
+							link_confirmed = true
+						end
+					end
+				else
+					link_confirmed = true
 				end
-				LinkParam(track, touched_fx, fx, touched_param, mod_param_id, new_baseline, param_is_linked_to_anything, true)
+
+				-- LinkParam(track, touched_fx, fx, touched_param, mod_param_id, new_baseline, param_is_linked_to_anything, true)
 			else
 				reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)
 			end
 		end	
+
+		if user_os == "Win" and modal_popup_id == "mod_overwrite" and modal_popup == true then
+			local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped.\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
+			if user_input_overwrite == 6 then -- YES
+				link_confirmed = true
+			end			
+			ResetModalWorkaroundVariables()
+		end	
+
+		if link_confirmed == true then
+			-- Keep parameter current value if no native modulation is active
+			local new_baseline
+			if t_pm_data.lfo_active == 1 or t_pm_data.acs_active == 1 then
+				new_baseline = t_pm_data.baseline
+			else				
+				new_baseline = reaper.TrackFX_GetParam(track, t_last_param.fx, t_last_param.param)
+			end
+			
+			LinkParam(track, touched_fx, fx, touched_param, mod_param_id, new_baseline, param_is_linked_to_anything, true)
+		end
+
 		reaper.ImGui_PopFont(ctx)				
 
 		if param_is_linked_to_anything == 1 then			
@@ -2267,12 +2303,12 @@ function DrawIcon(width, height, color, track, fx, param, state, icon)
 				GetPMData(track, fx, param)
 			end
 		end
+	end
 
-		if user_os == "Win" and modal_popup_id == "icon_midiLearn" and modal_popup == true then
-			Command(41144) -- FX: Set MIDI learn for last touched FX parameter			
-			GetPMData(track, fx, param)		
-			ResetModalWorkaroundVariables()
-		end
+	if user_os == "Win" and modal_popup_id == "icon_midiLearn" and modal_popup == true then
+		Command(41144) -- FX: Set MIDI learn for last touched FX parameter			
+		GetPMData(track, fx, param)		
+		ResetModalWorkaroundVariables()
 	end
 end  
 
@@ -2701,7 +2737,7 @@ function Init()
 	user_os = reaper.GetOS()
 	if user_os:match("macOS") or user_os:match("OSX") then
 		user_os = "Mac"
-	elseif user_os:match("win") then
+	elseif user_os:match("Win") then
 		user_os = "Win"
 	end
 
