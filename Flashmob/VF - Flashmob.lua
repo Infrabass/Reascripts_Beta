@@ -2,14 +2,9 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.3.3
+-- @Version 0.3.4
 -- @Changelog
---   Add blinking effect to MOD AMOUNT at 0% to give a better visual feedback
---   Add tab indicator line for active modulation to give a better visual feedback
---   In assignation lists, add the possibility open FX by clicking on the FX name
---   CMD(Mac)/CTRL(PC) + click to open FX in alternate mode (behaviour set in script settings)
---   When opening MOD assignation lists, auto-enable modulation mapping for MACRO so they can be selected like other FX parameters
---   Attempt to fix the Reaper modal window bug on Windows
+--   Fixing modal window bug on Windows
 -- @Provides
 --   [main] VF - Flashmob.lua
 --   Flashmob.RfxChain
@@ -75,6 +70,8 @@ Full Changelog:
 		+ CMD(Mac)/CTRL(PC) + click to open FX in alternate mode (behaviour set in script settings)
 		+ When opening MOD assignation lists, auto-enable modulation mapping for MACRO so they can be selected like other FX parameters	
 		+ Attempt to fix the Reaper modal window bug on Windows
+	v0.3.4
+		+ Fixing modal window bug on Windows
 
 
 ]]
@@ -848,7 +845,17 @@ function ToggleSidechain(track, fx)
 	reaper.TrackFX_SetPinMappings(track, fx, 1, 1, out_R, 0) 		
 end
 
+function StartModalWorkaround(id)
+	modal_popup_id = id
+	modal_popup_prepare = true
+end
 
+function ResetModalWorkaroundVariables()
+	modal_popup_prepare = nil
+	wait1Frame = nil
+	modal_popup = nil
+	modal_popup_id = ""
+end
 
 ------------------------------------------------------------------------------------
 -- GUI
@@ -1678,18 +1685,17 @@ function DrawMIDILearn(track, fx, param)
 			-- reaper.SetCursorContext(1) -- Set focus back to arrange
 			-- reaper.ImGui_SetKeyboardFocusHere(ctx)
 			if user_os == "Win" then
-				modal_popup_prepare = true
+				StartModalWorkaround("nativeTab_midiLearn")
 			else
 				Command(41144) -- FX: Set MIDI learn for last touched FX parameter
 				GetPMData(track, fx, param)
 			end
 		end
 
-		if user_os == "Win" and modal_popup == true then
+		if user_os == "Win" and modal_popup_id == "nativeTab_midiLearn" and modal_popup == true then
 			Command(41144) -- FX: Set MIDI learn for last touched FX parameter			
 			GetPMData(track, fx, param)		
-			modal_popup_prepare = nil
-			modal_popup = nil
+			ResetModalWorkaroundVariables()
 		end
 
 		reaper.ImGui_PopStyleColor(ctx, 3)
@@ -2252,9 +2258,20 @@ function DrawIcon(width, height, color, track, fx, param, state, icon)
 			ToggleNativeLFO(track, fx, param, state)
 		elseif icon == 2 then
 			ToggleNativeACS(track, fx, param, state)
-		elseif icon == 3 then			
-			Command(41144) -- FX: Set MIDI learn for last touched FX parameter
-			GetPMData(track, fx, param)
+		elseif icon == 3 then				
+			-- Command(41144) -- FX: Set MIDI learn for last touched FX parameter
+			if user_os == "Win" then
+				StartModalWorkaround("icon_midiLearn")
+			else
+				Command(41144) -- FX: Set MIDI learn for last touched FX parameter
+				GetPMData(track, fx, param)
+			end
+		end
+
+		if user_os == "Win" and modal_popup_id == "icon_midiLearn" and modal_popup == true then
+			Command(41144) -- FX: Set MIDI learn for last touched FX parameter			
+			GetPMData(track, fx, param)		
+			ResetModalWorkaroundVariables()
 		end
 	end
 end  
@@ -2682,7 +2699,7 @@ end
 function Init()
 
 	user_os = reaper.GetOS()
-	if user_os:match("mac") then
+	if user_os:match("macOS") or user_os:match("OSX") then
 		user_os = "Mac"
 	elseif user_os:match("win") then
 		user_os = "Win"
@@ -2796,7 +2813,9 @@ function Init()
 	help_page = 0
 	settings_page = 0
 	modal_popup_prepare = nil -- Disable ImGui window on top of all other windows on PC when Reaper native modals are going to open next frame
+	wait1Frame = nil
 	modal_popup = nil -- Open Reaper native modal after TopMost window flag have been disabled
+	modal_popup_id = ""
 
 	-- Load Images	
 	img_lock_off = reaper.ImGui_CreateImage(script_path .. "Icons/" .. "Lock_off.png")
@@ -3077,7 +3096,7 @@ function Frame()
 				reaper.ImGui_Dummy(ctx, 0, 0)
 				reaper.ImGui_Text(ctx, "2. Touch any other plugin FX parameter on this track.")
 				reaper.ImGui_Dummy(ctx, 0, 0)
-				reaper.ImGui_Text(ctx, "3. You now have 3 options to modulate this parameter:\n\tA - Khs SNAPHEAP modulation\n\tB - Flashmob MACRO\n\tC - Reaper NATIVE modulation")				
+				reaper.ImGui_Text(ctx, "3. You now have 3 options to modulate this parameter:\n\tA - Khs SNAPHEAP modulation\n\t(require Khs Snapheap plugin)\n\tB - Flashmob MACRO\n\tC - Reaper NATIVE modulation")				
 				reaper.ImGui_Dummy(ctx, 0, 0)
 				reaper.ImGui_Text(ctx, "4. For SNAPHEAP MODS and MACROS, select the wanted tab and click on their name to create a mapping.")
 				reaper.ImGui_Text(ctx, "To adjust the amount of modulation, tweak the AMOUNT SLIDER in the LAST FX PARAM section.")
@@ -3101,26 +3120,47 @@ function Frame()
 				reaper.ImGui_PopFont(ctx)
 
 				reaper.ImGui_Dummy(ctx, 0, 10)
+				local button_pos_x = (width * 0.5) - ((width * 0.75) * 0.5)
+				local button_width = width * 0.75
+				local flashmob_manual_text = "Flashmob Manual"
+				local flashmob_manual_text_clipped = ClipText(flashmob_manual_text, button_width - win_padding_x)
 
-				reaper.ImGui_SetCursorPosX(ctx, (width * 0.5) - ((width * 0.75) * 0.5))
-				if reaper.ImGui_Button(ctx, "Flashmob Manual", width * 0.75, 30) then
+				reaper.ImGui_SetCursorPosX(ctx, button_pos_x)
+				if reaper.ImGui_Button(ctx, flashmob_manual_text_clipped, button_width, 30) then
 					OpenURL("https://www.vincentfliniaux.com")
 				end
+				if flashmob_manual_text_clipped ~= flashmob_manual_text then ToolTip(flashmob_manual_text) end
+
 				reaper.ImGui_Dummy(ctx, 0, 0)
-				reaper.ImGui_SetCursorPosX(ctx, (width * 0.5) - ((width * 0.75) * 0.5))
-				if reaper.ImGui_Button(ctx, "Snapheap Tutorials", width * 0.75, 30) then
+				local snapheap_tuto_text = "Snapheap Tutorials"
+				local snapheap_tuto_text_clipped = ClipText(snapheap_tuto_text, button_width - win_padding_x)
+
+				reaper.ImGui_SetCursorPosX(ctx, button_pos_x)
+				if reaper.ImGui_Button(ctx, snapheap_tuto_text_clipped, button_width, 30) then
 					OpenURL("https://youtube.com/playlist?list=PLXyyKlK7qpvUOJSzJEK0yRn1JhNJAtTxE&si=GDM0jt3mVnoAkFbQ")
 				end
+				if snapheap_tuto_text_clipped ~= snapheap_tuto_text then ToolTip(snapheap_tuto_text) end
+
 				reaper.ImGui_Dummy(ctx, 0, 0)
-				reaper.ImGui_SetCursorPosX(ctx, (width * 0.5) - ((width * 0.75) * 0.5))
-				if reaper.ImGui_Button(ctx, "Ask Questions", width * 0.75, 30) then
+				local ask_questions_text = "Ask Questions"
+				local ask_questions_text_clipped = ClipText(ask_questions_text, button_width - win_padding_x)
+
+				reaper.ImGui_SetCursorPosX(ctx, button_pos_x)
+				if reaper.ImGui_Button(ctx, ask_questions_text_clipped, button_width, 30) then
 					-- Open forum thread link
-				end				
+				end	
+				if ask_questions_text_clipped ~= ask_questions_text then ToolTip(ask_questions_text) end
+
 				reaper.ImGui_Dummy(ctx, 0, 0)
-				reaper.ImGui_SetCursorPosX(ctx, (width * 0.5) - ((width * 0.75) * 0.5))
-				if reaper.ImGui_Button(ctx, "Support Me", width * 0.75, 30) then
+				local support_me_text = "Support Me"
+				local support_me_text_clipped = ClipText(support_me_text, button_width - win_padding_x)
+
+				reaper.ImGui_SetCursorPosX(ctx, button_pos_x)
+				if reaper.ImGui_Button(ctx, support_me_text_clipped, button_width, 30) then
 					-- Open Donate link
 				end	
+				if support_me_text_clipped ~= support_me_text then ToolTip(support_me_text) end
+
 				reaper.ImGui_EndChild(ctx)
 			end							
 
@@ -3132,15 +3172,6 @@ function Frame()
 			if reaper.ImGui_BeginChild(ctx, "settings_page", width, height - 50) then		
 				reaper.ImGui_SeparatorText(ctx, "Global Settings")
 				reaper.ImGui_Dummy(ctx, 0, 0)
-				if reaper.ImGui_Checkbox(ctx, "Reaper Track Control", setting_track_control) then
-					if setting_track_control == 1 then 
-						setting_track_control = 0 
-					else 
-						setting_track_control = 1
-					end
-					reaper.SetExtState("vf_flashmob", "track_control", setting_track_control, 1)					
-				end					
-				ToolTip("If enabled, FX parameters mapped to SNAPHEAP or NATIVE modulations \nare visible as Reaper Track Control (TCP and MCP)", 1)
 
 				if reaper.ImGui_Checkbox(ctx, "Tooltip", setting_tooltip) then
 					if setting_tooltip == 1 then 
@@ -3151,6 +3182,18 @@ function Frame()
 					reaper.SetExtState("vf_flashmob", "tooltip", setting_tooltip, 1)					
 				end					
 				ToolTip("If enabled, display additional info when hovering the mouse over \nvarious UI elements", 1)
+
+				local track_control_text = "Reaper Track Control"
+				local track_control_text_clipped = ClipText(track_control_text, width - 22)
+				if reaper.ImGui_Checkbox(ctx, track_control_text_clipped, setting_track_control) then
+					if setting_track_control == 1 then 
+						setting_track_control = 0 
+					else 
+						setting_track_control = 1
+					end
+					reaper.SetExtState("vf_flashmob", "track_control", setting_track_control, 1)					
+				end					
+				ToolTip("If enabled, FX parameters mapped to SNAPHEAP or NATIVE modulations \nare visible as Reaper Track Control (TCP and MCP)", 1)
 
 				reaper.ImGui_Dummy(ctx, 0, 0)
 
@@ -3164,8 +3207,9 @@ function Frame()
 				-- Multiple Flashmob instances selector
 				FlashmobInstanceSelector(track)
 
-
-				if reaper.ImGui_Checkbox(ctx, "Follower Sidechain", setting_sidechain) then
+				local sidechain_text = "Follower Sidechain"
+				local sidechain_text_clipped = ClipText(sidechain_text, width - 22)
+				if reaper.ImGui_Checkbox(ctx, sidechain_text_clipped, setting_sidechain) then
 					if setting_sidechain == 1 then 
 						setting_sidechain = 0 
 					else 
@@ -3720,7 +3764,7 @@ function Frame()
 								end
 
 							else
-								local invalid_flashmob_text = "Flashmob have been detected but Snap Heap is probably missing"
+								local invalid_flashmob_text = "Khs SnapHeap plugin is probably missing\nPlease read the manual for more info"
 								invalid_flashmob_text = WrapText(invalid_flashmob_text, width)
 								reaper.ImGui_Text(ctx, invalid_flashmob_text)
 							end
@@ -3789,6 +3833,12 @@ function Frame()
 								DrawNativeACS(track, t_last_param.fx, t_last_param.param)													
 							end
 							previous_tab_selected = tab_selected											
+						else
+							if tab_selected then
+								reaper.ImGui_PushTextWrapPos(ctx, 0)
+								reaper.ImGui_Text(ctx, "No last-touched FX parameter detected")
+								reaper.ImGui_PopTextWrapPos(ctx)
+							end
 						end								
 
 						if tab_selected then
@@ -3920,7 +3970,22 @@ function Loop()
 
 	-- reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_WindowPadding(), 0, 8)
 
-	if not modal_popup_prepare then
+	-- Workaround to fix issue with Reaper native modal windows opening behind the ImGui window (Thanks CFillion)
+	-- When script want to open a native modal:
+		-- 1. clear WindowFlags_TopMost and wait a frame
+		-- 2. open the modal dialog (the script is suspended while it's open since it's waiting on the modal to return)
+		-- 3. set WindowFlags_TopMost on the next frame	
+	if user_os == "Win" then
+		if not modal_popup_prepare and not wait1Frame then
+			main_window_flags = main_window_flags | reaper.ImGui_WindowFlags_TopMost()
+		end
+
+		if wait1Frame then modal_popup = true end
+
+		if modal_popup_prepare then
+			wait1Frame = true
+		end	
+	else
 		main_window_flags = main_window_flags | reaper.ImGui_WindowFlags_TopMost()
 	end
 
