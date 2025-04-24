@@ -2,7 +2,7 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.3.5
+-- @Version 0.3.6
 -- @Changelog
 --   Fixing modal window bug on Windows
 -- @Provides
@@ -1264,7 +1264,8 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 					if user_os == "Win" then
 						StartModalWorkaround("mod_overwrite")
 					else	
-						local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped.\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
+						local _, link_source_param_name = reaper.TrackFX_GetParamName(track, t_pm_data.link_source_fx, t_pm_data.link_source_param)
+						local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped to\n[" .. link_source_param_name ..  "].\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
 						if user_input_overwrite == 6 then -- YES
 							link_confirmed = true
 						end
@@ -1285,7 +1286,8 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 		end	
 
 		if user_os == "Win" and modal_popup_id == "mod_overwrite" and modal_popup == true then
-			local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped.\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
+			local _, link_source_param_name = reaper.TrackFX_GetParamName(track, t_pm_data.link_source_fx, t_pm_data.link_source_param)
+			local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped to\n[" .. link_source_param_name ..  "].\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
 			if user_input_overwrite == 6 then -- YES
 				link_confirmed = true
 			end			
@@ -1559,7 +1561,11 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 		if reaper.ImGui_Button(ctx, macro_name_clipped, width - x - win_padding_x, 18) then	
 			if t_last_param.param then	
 				if touched_fx + (t_last_param.param * 0.1) == fx + (macro_param_id * 0.1) then -- Check if last touched param is the macro itself
-					reaper.ShowMessageBox("A Macro parameter cannot be mapped to itself", "MAPPING FAILED", 0)
+					if user_os == "Win" then
+						StartModalWorkaround("macro_error_map_to_itself")
+					else					
+						reaper.ShowMessageBox("A Macro parameter cannot be mapped to itself", "MAPPING FAILED", 0)
+					end
 				else				
 
 					-- -- Keep parameter current value if no native modulation is active
@@ -1574,7 +1580,8 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 						if user_os == "Win" then
 							StartModalWorkaround("macro_overwrite")
 						else	
-							local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped.\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
+							local _, link_source_param_name = reaper.TrackFX_GetParamName(track, t_pm_data.link_source_fx, t_pm_data.link_source_param)
+							local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped to\n[" .. link_source_param_name ..  "].\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
 							if user_input_overwrite == 6 then -- YES
 								link_confirmed = true
 							end
@@ -1595,8 +1602,14 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 			end
 		end	
 
+		if user_os == "Win" and modal_popup_id == "macro_error_map_to_itself" and modal_popup == true then
+			reaper.ShowMessageBox("A Macro parameter cannot be mapped to itself", "MAPPING FAILED", 0)
+			ResetModalWorkaroundVariables()
+		end			
+
 		if user_os == "Win" and modal_popup_id == "macro_overwrite" and modal_popup == true then
-			local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped.\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
+			local _, link_source_param_name = reaper.TrackFX_GetParamName(track, t_pm_data.link_source_fx, t_pm_data.link_source_param)
+			local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped to\n[" .. link_source_param_name ..  "].\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
 			if user_input_overwrite == 6 then -- YES
 				link_confirmed = true
 			end			
@@ -1612,7 +1625,7 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 				new_baseline = reaper.TrackFX_GetParam(track, t_last_param.fx, t_last_param.param)
 			end
 
-			LinkParam(track, touched_fx, fx, touched_param, mod_param_id, new_baseline, param_is_linked_to_anything, true)
+			LinkParam(track, touched_fx, fx, touched_param, macro_param_id, new_baseline, param_is_linked_to_anything, true)
 		end
 
 		if user_os == "Win" and modal_popup_id == "macro_map_no_param" and modal_popup == true then
@@ -1636,9 +1649,19 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 			reaper.ImGui_SetCursorPos(ctx, (popup_width * 0.5) - (width * 0.5), y)
 			reaper.ImGui_PushFont(ctx, fonts.medium_bold)
 			if reaper.ImGui_Button(ctx, macro_name, width) then
+				if user_os == "Win" then
+					StartModalWorkaround("macro_alias")
+				else					
+					reaper.TrackFX_SetParam(track, fx, macro_param_id, macro_val) -- To set as last touched param
+					Command(41145) -- FX: Set alias for last touched FX parameter
+				end
+			end		
+
+			if user_os == "Win" and modal_popup_id == "macro_alias" and modal_popup == true then
 				reaper.TrackFX_SetParam(track, fx, macro_param_id, macro_val) -- To set as last touched param
 				Command(41145) -- FX: Set alias for last touched FX parameter
-			end			
+			end	
+
 			reaper.ImGui_PopFont(ctx)
 			ToolTip("Click to rename Macro")
 
@@ -2762,17 +2785,32 @@ function FlashmobInstanceSelector(track)
 			if reaper.ImGui_IsItemHovered(ctx) then									
 				flashmob_instance_color = BrighterColor2(t_color_palette[mod_container_table_id], 0.2)
 				if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
-					local retval, retvals_csv = reaper.GetUserInputs("Rename Flashmob Instance", 1, "New Name", mod_container_name)
-					if retval then
-						local new_name = retvals_csv:match("([^,]+)")
-						if new_name ~= "" then
-							reaper.TrackFX_SetNamedConfigParm(track, mod_container_id, "renamed_name", new_name)
+					if user_os == "Win" then
+						StartModalWorkaround("flashmob_inst_alias")
+					else						
+						local retval, retvals_csv = reaper.GetUserInputs("Rename Flashmob Instance", 1, "New Name", mod_container_name)
+						if retval then
+							local new_name = retvals_csv:match("([^,]+)")
+							if new_name ~= "" then
+								reaper.TrackFX_SetNamedConfigParm(track, mod_container_id, "renamed_name", new_name)
+							end
 						end
 					end
 				end
 			else
 				flashmob_instance_color = t_color_palette[mod_container_table_id]
 			end
+
+			if user_os == "Win" and modal_popup_id == "flashmob_inst_alias" and modal_popup == true then
+				local retval, retvals_csv = reaper.GetUserInputs("Rename Flashmob Instance", 1, "New Name", mod_container_name)
+				if retval then
+					local new_name = retvals_csv:match("([^,]+)")
+					if new_name ~= "" then
+						reaper.TrackFX_SetNamedConfigParm(track, mod_container_id, "renamed_name", new_name)
+					end
+				end
+				ResetModalWorkaroundVariables()
+			end				
 
 			reaper.ImGui_SetCursorPos(ctx, flashmob_name_pos, y)
 			reaper.ImGui_PushFont(ctx, fonts.medium_bold)
