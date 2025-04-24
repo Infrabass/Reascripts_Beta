@@ -2,16 +2,15 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.4
+-- @Version 0.4.1
 -- @Changelog
 --   Fix modal window bug on Windows
 --   Add default preset feature in setting
 --   Avoid auto-opening Flashmob window when inserting even if the user setting is to "Auto-float newly created FX windows"
 -- @Provides
 --   [main] VF - Flashmob.lua
---   Flashmob.RfxChain
---   vf_FLASHMOB.jsfx
---   vf_FLASHMOB_GEN.jsfx
+--   Flashmob.RfxChainx
+--   FXChains/*.RfxChain	
 --   Icons/*.png
 --   [effect] vf_FLASHMOB.jsfx
 --   [effect] vf_FLASHMOB_GEN.jsfx
