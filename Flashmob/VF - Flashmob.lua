@@ -2,7 +2,7 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.3.4
+-- @Version 0.3.5
 -- @Changelog
 --   Fixing modal window bug on Windows
 -- @Provides
@@ -617,10 +617,10 @@ function LinkParam(track, touched_fx, fx, touched_param, param, new_baseline, pa
 end
 
 function UnlinkParam(track, touched_fx, touched_param)
-	local user_input_overwrite = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
-	if user_input_overwrite == 7 then -- NO
-		return
-	end	
+	-- local user_input_overwrite = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
+	-- if user_input_overwrite == 7 then -- NO
+	-- 	return
+	-- end	
 
 	reaper.TrackFX_SetNamedConfigParm(track, touched_fx, "param." .. touched_param .. ".plink.effect", -1)
 	reaper.TrackFX_SetNamedConfigParm(track, touched_fx, "param." .. touched_param .. ".plink.param", -1)
@@ -1275,7 +1275,12 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 
 				-- LinkParam(track, touched_fx, fx, touched_param, mod_param_id, new_baseline, param_is_linked_to_anything, true)
 			else
-				reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)
+				if user_os == "Win" then
+					StartModalWorkaround("mod_map_no_param")
+				else	
+					reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)
+				end				
+				-- reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)
 			end
 		end	
 
@@ -1295,9 +1300,14 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 			else				
 				new_baseline = reaper.TrackFX_GetParam(track, t_last_param.fx, t_last_param.param)
 			end
-			
+
 			LinkParam(track, touched_fx, fx, touched_param, mod_param_id, new_baseline, param_is_linked_to_anything, true)
 		end
+
+		if user_os == "Win" and modal_popup_id == "mod_map_no_param" and modal_popup == true then
+			reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)		
+			ResetModalWorkaroundVariables()
+		end			
 
 		reaper.ImGui_PopFont(ctx)				
 
@@ -1526,24 +1536,95 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 		local rv, macro_name = reaper.TrackFX_GetParamName(track, fx, macro_param_id)		
 		local macro_name_clipped = ClipText(macro_name, width - x - win_padding_x - 6)		
 		reaper.ImGui_PushFont(ctx, fonts.medium_bold)
-		if reaper.ImGui_Button(ctx, macro_name_clipped, width - x - win_padding_x, 18) then		
-			if t_last_param.param then 
+		-- if reaper.ImGui_Button(ctx, macro_name_clipped, width - x - win_padding_x, 18) then		
+		-- 	if t_last_param.param then 
+		-- 		if touched_fx + (t_last_param.param * 0.1) == fx + (macro_param_id * 0.1) then -- Check if last touched param is the macro itself
+		-- 			reaper.ShowMessageBox("A Macro parameter cannot be mapped to itself", "MAPPING FAILED", 0)
+		-- 		else
+		-- 			-- Keep parameter current value if no native modulation is active
+		-- 			local new_baseline
+		-- 			if t_pm_data.lfo_active == 1 or t_pm_data.acs_active == 1 then
+		-- 				new_baseline = t_pm_data.baseline
+		-- 			else				
+		-- 				new_baseline = reaper.TrackFX_GetParam(track, t_last_param.fx, t_last_param.param)
+		-- 			end
+		-- 			LinkParam(track, touched_fx, fx, touched_param, macro_param_id, new_baseline, param_is_linked_to_anything, false)
+		-- 		end
+		-- 	else
+		-- 		reaper.ShowMessageBox("You must adjust an FX parameter before mapping to this macro", "MAPPING FAILED", 0)
+		-- 	end
+		-- end
+
+		local link_confirmed
+		if reaper.ImGui_Button(ctx, macro_name_clipped, width - x - win_padding_x, 18) then	
+			if t_last_param.param then	
 				if touched_fx + (t_last_param.param * 0.1) == fx + (macro_param_id * 0.1) then -- Check if last touched param is the macro itself
 					reaper.ShowMessageBox("A Macro parameter cannot be mapped to itself", "MAPPING FAILED", 0)
-				else
-					-- Keep parameter current value if no native modulation is active
-					local new_baseline
-					if t_pm_data.lfo_active == 1 or t_pm_data.acs_active == 1 then
-						new_baseline = t_pm_data.baseline
-					else				
-						new_baseline = reaper.TrackFX_GetParam(track, t_last_param.fx, t_last_param.param)
+				else				
+
+					-- -- Keep parameter current value if no native modulation is active
+					-- local new_baseline
+					-- if t_pm_data.lfo_active == 1 or t_pm_data.acs_active == 1 then
+					-- 	new_baseline = t_pm_data.baseline
+					-- else				
+					-- 	new_baseline = reaper.TrackFX_GetParam(track, t_last_param.fx, t_last_param.param)
+					-- end
+
+					if param_is_linked_to_anything == 1 then
+						if user_os == "Win" then
+							StartModalWorkaround("macro_overwrite")
+						else	
+							local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped.\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
+							if user_input_overwrite == 6 then -- YES
+								link_confirmed = true
+							end
+						end
+					else
+						link_confirmed = true
 					end
-					LinkParam(track, touched_fx, fx, touched_param, macro_param_id, new_baseline, param_is_linked_to_anything, false)
+
+					-- LinkParam(track, touched_fx, fx, touched_param, mod_param_id, new_baseline, param_is_linked_to_anything, true)
 				end
 			else
-				reaper.ShowMessageBox("You must adjust an FX parameter before mapping to this macro", "MAPPING FAILED", 0)
+				if user_os == "Win" then
+					StartModalWorkaround("macro_map_no_param")
+				else	
+					reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)
+				end				
+				-- reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)
 			end
+		end	
+
+		if user_os == "Win" and modal_popup_id == "macro_overwrite" and modal_popup == true then
+			local user_input_overwrite = reaper.ShowMessageBox("The parameter is already mapped.\nAre you sure you want to overwrite the mapping?", "OVERWRITE MAPPING?", 4)
+			if user_input_overwrite == 6 then -- YES
+				link_confirmed = true
+			end			
+			ResetModalWorkaroundVariables()
+		end	
+
+		if link_confirmed == true then
+			-- Keep parameter current value if no native modulation is active
+			local new_baseline
+			if t_pm_data.lfo_active == 1 or t_pm_data.acs_active == 1 then
+				new_baseline = t_pm_data.baseline
+			else				
+				new_baseline = reaper.TrackFX_GetParam(track, t_last_param.fx, t_last_param.param)
+			end
+
+			LinkParam(track, touched_fx, fx, touched_param, mod_param_id, new_baseline, param_is_linked_to_anything, true)
 		end
+
+		if user_os == "Win" and modal_popup_id == "macro_map_no_param" and modal_popup == true then
+			reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)		
+			ResetModalWorkaroundVariables()
+		end	
+
+
+
+
+
+
 		reaper.ImGui_PopFont(ctx)
 
 		reaper.ImGui_OpenPopupOnItemClick(ctx, 'macro_popup' .. str_index, reaper.ImGui_PopupFlags_MouseButtonRight())		
