@@ -2,9 +2,11 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.3.8
+-- @Version 0.4
 -- @Changelog
---   Fixing modal window bug on Windows
+--   Fix modal window bug on Windows
+--   Add default preset feature in setting
+--   Avoid auto-opening Flashmob window when inserting even if the user setting is to "Auto-float newly created FX windows"
 -- @Provides
 --   [main] VF - Flashmob.lua
 --   Flashmob.RfxChain
@@ -72,6 +74,10 @@ Full Changelog:
 		+ Attempt to fix the Reaper modal window bug on Windows
 	v0.3.4
 		+ Fixing modal window bug on Windows
+	v0.4
+		+ Fix modal window bug on Windows
+		+ Add default preset feature in setting
+		+ Avoid auto-opening Flashmob window when inserting even if the user setting is to "Auto-float newly created FX windows"	
 
 
 ]]
@@ -857,6 +863,39 @@ function ResetModalWorkaroundVariables()
 	modal_popup_id = ""
 end
 
+function GetFXChainsList()
+	local t_fxchains = {}
+	local path = script_path .. "FXChains"
+	-- if user_os == "Mac" then
+	-- 	path = script_path .. "FXChains"
+	-- elseif user_os == "Win" then
+
+	-- end
+
+	local file = ""	
+	local i = 0
+	while file do
+		file = reaper.EnumerateFiles(path, i)
+		if file then 
+			if file:match(".*%.RfxChain$") then
+				t_fxchains[#t_fxchains+1] = file:gsub("%.RfxChain$", "")
+			end
+		end
+		i = i + 1
+	end
+	return t_fxchains
+end
+
+function AddFlashmobInstance(track, first_slot)
+	local openFloating_setting = reaper.SNM_GetIntConfigVar("fxfloat_focus", -666) -- Save the original user setting to open or not floating window when adding new FX
+	reaper.SNM_SetIntConfigVar("fxfloat_focus", openFloating_setting&(~4)) -- Temporarly disable the user setting
+	reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts Beta/Flashmob/FXChains/" .. default_preset  .. ".RfxChain", false, 1024)	-- last argument adds an instance if one is not found at the first FX chain index				
+	if first_slot and first_slot == 1 then
+		reaper.TrackFX_CopyToTrack(track, reaper.TrackFX_GetCount(track)-1, track, 0, 1) -- Move Flashmob to the first FX chain slot
+	end
+	reaper.SNM_SetIntConfigVar("fxfloat_focus", openFloating_setting) -- Restore user setting						
+end	
+
 ------------------------------------------------------------------------------------
 -- GUI
 ------------------------------------------------------------------------------------
@@ -1277,7 +1316,7 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 				-- LinkParam(track, touched_fx, fx, touched_param, mod_param_id, new_baseline, param_is_linked_to_anything, true)
 			else
 				if user_os == "Win" then
-					StartModalWorkaround("mod_map_no_param" .. str_index)
+					StartModalWorkaround("map_no_param")
 				else	
 					reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)
 				end				
@@ -1304,12 +1343,7 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 			end
 
 			LinkParam(track, touched_fx, fx, touched_param, mod_param_id, new_baseline, param_is_linked_to_anything, true)
-		end
-
-		if user_os == "Win" and modal_popup_id == "mod_map_no_param" .. str_index and modal_popup == true then
-			reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)		
-			ResetModalWorkaroundVariables()
-		end			
+		end		
 
 		reaper.ImGui_PopFont(ctx)				
 
@@ -1617,7 +1651,7 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 				end
 			else
 				if user_os == "Win" then
-					StartModalWorkaround("macro_map_no_param" .. str_index)
+					StartModalWorkaround("map_no_param")
 				else	
 					reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)
 				end				
@@ -1650,17 +1684,6 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 
 			LinkParam(track, touched_fx, fx, touched_param, macro_param_id, new_baseline, param_is_linked_to_anything, true)
 		end
-
-		if user_os == "Win" and modal_popup_id == "macro_map_no_param" .. str_index and modal_popup == true then
-			reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)		
-			ResetModalWorkaroundVariables()
-		end	
-
-
-
-
-
-
 		reaper.ImGui_PopFont(ctx)
 
 		reaper.ImGui_OpenPopupOnItemClick(ctx, 'macro_popup' .. str_index, reaper.ImGui_PopupFlags_MouseButtonRight())		
@@ -1955,7 +1978,7 @@ function DrawNativeLFO(track, fx, param)
 			if rv_lfo_shape then
 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.shape", t_lfo_params.lfo_shape)
 			end
-			if text_lfo_shape_clipped ~= text_lfo_shape then ToolTip(text_lfo_shape) end
+			if text_lfo_shape_clipped ~= text_lfo_shape then ToolTip(text_lfo_shape, 1) end
 
 			-- LFO speed
 			local text_lfo_speed = "Speed"
@@ -2008,7 +2031,7 @@ function DrawNativeLFO(track, fx, param)
 					reaper.ImGui_EndCombo(ctx)
 				end			
 			end
-			if text_lfo_speed_clipped ~= text_lfo_speed then ToolTip(text_lfo_speed) end	
+			if text_lfo_speed_clipped ~= text_lfo_speed then ToolTip(text_lfo_speed, 1) end	
 
 			-- LFO phase
 			local text_lfo_phase = "Phase"
@@ -2017,7 +2040,7 @@ function DrawNativeLFO(track, fx, param)
 			if rv_lfo_phase then
 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.phase", t_lfo_params.lfo_phase)
 			end				
-			if text_lfo_phase_clipped ~= text_lfo_phase then ToolTip(text_lfo_phase) end	
+			if text_lfo_phase_clipped ~= text_lfo_phase then ToolTip(text_lfo_phase, 1) end	
 
 			-- LFO strength
 			local text_lfo_strength = "Strength"
@@ -2026,7 +2049,7 @@ function DrawNativeLFO(track, fx, param)
 			if rv_lfo_strength then				
 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.strength", t_lfo_params.lfo_strength)
 			end				
-			if text_lfo_strength_clipped ~= text_lfo_strength then ToolTip(text_lfo_strength) end	
+			if text_lfo_strength_clipped ~= text_lfo_strength then ToolTip(text_lfo_strength, 1) end	
 			if reaper.ImGui_IsItemActive(ctx) then
 				lfo_strength_adjust = 1
 			else
@@ -2151,7 +2174,7 @@ function DrawNativeACS(track, fx, param)
 			if rv_acs_strength then
 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.strength", t_acs_params.acs_strength)
 			end	
-			if text_acs_strength_clipped ~= text_acs_strength then ToolTip(text_acs_strength) end	
+			if text_acs_strength_clipped ~= text_acs_strength then ToolTip(text_acs_strength, 1) end	
 
 			if reaper.ImGui_IsItemActive(ctx) then
 				acs_strength_adjust = 1
@@ -2166,7 +2189,7 @@ function DrawNativeACS(track, fx, param)
 			if rv_acs_attack then
 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.attack", t_acs_params.acs_attack)
 			end	
-			if text_acs_attack_clipped ~= text_acs_attack then ToolTip(text_acs_attack) end	
+			if text_acs_attack_clipped ~= text_acs_attack then ToolTip(text_acs_attack, 1) end	
 
 			-- acs release
 			local text_acs_release = "Release"
@@ -2175,7 +2198,7 @@ function DrawNativeACS(track, fx, param)
 			if rv_acs_release then
 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.release", t_acs_params.acs_release)
 			end	
-			if text_acs_release_clipped ~= text_acs_release then ToolTip(text_acs_release) end	
+			if text_acs_release_clipped ~= text_acs_release then ToolTip(text_acs_release, 1) end	
 
 			-- min volume
 			local text_acs_dblo = "Min Vol"
@@ -2184,7 +2207,7 @@ function DrawNativeACS(track, fx, param)
 			if rv_acs_dblo then
 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.dblo", t_acs_params.acs_dblo)
 			end	
-			if text_acs_dblo_clipped ~= text_acs_dblo then ToolTip(text_acs_dblo) end	
+			if text_acs_dblo_clipped ~= text_acs_dblo then ToolTip(text_acs_dblo, 1) end	
 
 			-- min volume
 			local text_acs_dbhi = "Max Vol"
@@ -2193,7 +2216,7 @@ function DrawNativeACS(track, fx, param)
 			if rv_acs_dbhi then
 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.dbhi", t_acs_params.acs_dbhi)
 			end	
-			if text_acs_dbhi_clipped ~= text_acs_dbhi then ToolTip(text_acs_dbhi) end	
+			if text_acs_dbhi_clipped ~= text_acs_dbhi then ToolTip(text_acs_dbhi, 1) end	
 			reaper.ImGui_PopStyleVar(ctx)						
 
 			-- acs direction
@@ -2280,7 +2303,7 @@ function DrawNativeACS(track, fx, param)
 				end
 				reaper.ImGui_EndCombo(ctx)
 			end	
-			if text_acs_chan_clipped ~= text_acs_chan then ToolTip(text_acs_chan) end				
+			if text_acs_chan_clipped ~= text_acs_chan then ToolTip(text_acs_chan, 1) end				
 		end
 		reaper.ImGui_PopStyleColor(ctx, 2)
 		reaper.ImGui_EndChild(ctx)
@@ -2661,11 +2684,21 @@ function CustomButton(ctx, index, button_nb, width, height, track, fx, param)
 			if index == 1 then param_lock_toggle = true end			
 			if index == 2 then macroMod_toggle = true end
 			if index == 3 then
-				reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts Beta/Flashmob/Flashmob.RfxChain", false, 1000)	-- last argument adds an instance if one is not found at the first FX chain index								
-				mod_container_id = reaper.TrackFX_GetCount(track) - 1
-				mod_container_table_id = mod_container_table_id + 1
-				reaper.GetSetMediaTrackInfo_String(track, "P_EXT:vf_flashmob_last_instance", mod_container_id .. "," .. mod_container_table_id, 1)
-				reload_settings = true
+				-- reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts Beta/Flashmob/Flashmob.RfxChain", false, 1000)	-- last argument adds an instance if one is not found at the first FX chain index								
+				if reaper.file_exists(script_path .. "FXChains/" .. default_preset .. ".RfxChain") then				
+					AddFlashmobInstance(track)
+					mod_container_id = reaper.TrackFX_GetCount(track) - 1
+					if not mod_container_table_id then mod_container_table_id = 0 end
+					mod_container_table_id = mod_container_table_id + 1
+					reaper.GetSetMediaTrackInfo_String(track, "P_EXT:vf_flashmob_last_instance", mod_container_id .. "," .. mod_container_table_id, 1)
+					reload_settings = true
+				else
+					if user_os == "Win" then
+						StartModalWorkaround("error_missing_fxchain" .. str_index)
+					else	
+						reaper.ShowMessageBox(script_path .. "FXChains/" .. default_preset .. ".RfxChain file is missing.\n\nPlease, choose another default preset in the script settings or reinstall the script.", "ERROR", 0)
+					end								
+				end					
 			end	
 			if index == 4 then 
 				helpPage_toggle = true 
@@ -3016,6 +3049,7 @@ function Init()
 	wait1Frame = nil
 	modal_popup = nil -- Open Reaper native modal after TopMost window flag have been disabled
 	modal_popup_id = ""
+	t_fxchains = {}
 
 	-- Load Images	
 	img_lock_off = reaper.ImGui_CreateImage(script_path .. "Icons/" .. "Lock_off.png")
@@ -3076,6 +3110,23 @@ function Init()
 
 	-- Init Sidechain setting
 	setting_sidechain = 0
+
+	-- Default FXChain Preset	
+	t_fxchains = GetFXChainsList()
+
+	setting_default_preset = reaper.GetExtState("vf_flashmob", "default_preset")	
+	if setting_default_preset == "" then
+		setting_default_preset = "Flashmob_Demo"
+	end
+
+	for i=1, #t_fxchains do
+		if t_fxchains[i] == setting_default_preset then
+			current_preset = i - 1
+			default_preset = t_fxchains[i]
+			break
+		end
+	end
+	if not default_preset then default_preset = "Flashmob_Demo" end
 
 	return true			
 end
@@ -3241,7 +3292,7 @@ function Frame()
 		local x, y = reaper.ImGui_GetCursorPos(ctx)
 
 		reaper.ImGui_PopStyleVar(ctx, 2)			
-		if track_name_clipped ~= track_name then ToolTip(track_name) end		
+		if track_name_clipped ~= track_name then ToolTip(track_name, 1) end		
 
 		-- Draw small x button to close the window
 		if reaper.ImGui_IsMouseHoveringRect(ctx, rect_x - win_padding_x, rect_y - win_padding_y, rect_x + width, rect_y + height) then
@@ -3283,11 +3334,25 @@ function Frame()
 		reaper.ImGui_PopStyleColor(ctx, 2)
 		reaper.ImGui_PopStyleVar(ctx, 3)
 
+		local function SeparatorColor()
+			local separator_color
+			if track_color == UI_color then
+				separator_color = full_white
+			else
+				separator_color = track_color
+			end
+			return separator_color
+		end
 
 		if help_page == 1 then
 			local width = width - 16
-			if reaper.ImGui_BeginChild(ctx, "help_page", width, height - 50) then		
+			if reaper.ImGui_BeginChild(ctx, "help_page", width, height - 50) then	
+				reaper.ImGui_Dummy(ctx, 0, 0)
+				reaper.ImGui_PushFont(ctx, fonts.medium_bold)	
+				reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), SeparatorColor())
 				reaper.ImGui_SeparatorText(ctx, "Quick Start Guide")
+				reaper.ImGui_PopStyleColor(ctx, 1)
+				reaper.ImGui_PopFont(ctx)
 				reaper.ImGui_Dummy(ctx, 0, 0)
 				reaper.ImGui_PushFont(ctx, fonts.medium_small_bold)
 				reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), white)
@@ -3329,7 +3394,7 @@ function Frame()
 				if reaper.ImGui_Button(ctx, flashmob_manual_text_clipped, button_width, 30) then
 					OpenURL("https://www.vincentfliniaux.com")
 				end
-				if flashmob_manual_text_clipped ~= flashmob_manual_text then ToolTip(flashmob_manual_text) end
+				if flashmob_manual_text_clipped ~= flashmob_manual_text then ToolTip(flashmob_manual_text, 1) end
 
 				reaper.ImGui_Dummy(ctx, 0, 0)
 				local snapheap_tuto_text = "Snapheap Tutorials"
@@ -3339,7 +3404,7 @@ function Frame()
 				if reaper.ImGui_Button(ctx, snapheap_tuto_text_clipped, button_width, 30) then
 					OpenURL("https://youtube.com/playlist?list=PLXyyKlK7qpvUOJSzJEK0yRn1JhNJAtTxE&si=GDM0jt3mVnoAkFbQ")
 				end
-				if snapheap_tuto_text_clipped ~= snapheap_tuto_text then ToolTip(snapheap_tuto_text) end
+				if snapheap_tuto_text_clipped ~= snapheap_tuto_text then ToolTip(snapheap_tuto_text, 1) end
 
 				reaper.ImGui_Dummy(ctx, 0, 0)
 				local ask_questions_text = "Ask Questions"
@@ -3349,7 +3414,7 @@ function Frame()
 				if reaper.ImGui_Button(ctx, ask_questions_text_clipped, button_width, 30) then
 					-- Open forum thread link
 				end	
-				if ask_questions_text_clipped ~= ask_questions_text then ToolTip(ask_questions_text) end
+				if ask_questions_text_clipped ~= ask_questions_text then ToolTip(ask_questions_text, 1) end
 
 				reaper.ImGui_Dummy(ctx, 0, 0)
 				local support_me_text = "Support Me"
@@ -3359,7 +3424,7 @@ function Frame()
 				if reaper.ImGui_Button(ctx, support_me_text_clipped, button_width, 30) then
 					-- Open Donate link
 				end	
-				if support_me_text_clipped ~= support_me_text then ToolTip(support_me_text) end
+				if support_me_text_clipped ~= support_me_text then ToolTip(support_me_text, 1) end
 
 				reaper.ImGui_EndChild(ctx)
 			end							
@@ -3369,8 +3434,13 @@ function Frame()
 			rv_flashmob, t_flashmob_id, t_flashmob_guid, flashmob_is_invalid = GetFlashmobInstances(track, flashmob_identifier)
 
 			local width = width - 16
-			if reaper.ImGui_BeginChild(ctx, "settings_page", width, height - 50) then		
+			if reaper.ImGui_BeginChild(ctx, "settings_page", width, height - 50) then
+				reaper.ImGui_Dummy(ctx, 0, 0)
+				reaper.ImGui_PushFont(ctx, fonts.medium_bold)	
+				reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), SeparatorColor())					
 				reaper.ImGui_SeparatorText(ctx, "Global Settings")
+				reaper.ImGui_PopStyleColor(ctx, 1)
+				reaper.ImGui_PopFont(ctx)
 				reaper.ImGui_Dummy(ctx, 0, 0)
 
 				if reaper.ImGui_Checkbox(ctx, "Tooltip", setting_tooltip) then
@@ -3394,15 +3464,18 @@ function Frame()
 					reaper.SetExtState("vf_flashmob", "track_control", setting_track_control, 1)					
 				end					
 				ToolTip("If enabled, FX parameters mapped to SNAPHEAP or NATIVE modulations \nare visible as Reaper Track Control (TCP and MCP)", 1)
+				reaper.ImGui_Dummy(ctx, 0, 4)
 
+				reaper.ImGui_PushFont(ctx, fonts.medium_bold)	
+				reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), SeparatorColor())					
+				reaper.ImGui_SeparatorText(ctx, "Instance Settings")
+				reaper.ImGui_PopStyleColor(ctx, 1)
+				reaper.ImGui_PopFont(ctx)
 				reaper.ImGui_Dummy(ctx, 0, 0)
 
 				if not rv_flashmob then
 					reaper.ImGui_BeginDisabled(ctx)
-				end
-
-				reaper.ImGui_SeparatorText(ctx, "Instance Settings")
-				reaper.ImGui_Dummy(ctx, 0, 0)
+				end				
 
 				-- Multiple Flashmob instances selector
 				FlashmobInstanceSelector(track)
@@ -3420,12 +3493,78 @@ function Frame()
 
 				ToolTip("If enabled, Snapheap audio follower will listen to the sidechain \nsignal (3/4) instead of the main signal)", 1)				
 
-
-
-
 				if not rv_flashmob then
 					reaper.ImGui_EndDisabled(ctx)
 				end
+				reaper.ImGui_Dummy(ctx, 0, 4)
+
+				reaper.ImGui_PushFont(ctx, fonts.medium_bold)
+				reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), SeparatorColor())						
+				reaper.ImGui_SeparatorText(ctx, "Default Preset")
+				reaper.ImGui_PopStyleColor(ctx, 1)
+				reaper.ImGui_PopFont(ctx)
+				reaper.ImGui_Dummy(ctx, 0, 0)
+
+				-- reaper.ImGui_Text(ctx, "Default Preset")
+				-- reaper.ImGui_SameLine(ctx)
+				-- reaper.ImGui_TextDisabled(ctx, "(?)")
+				-- ToolTip("Set the default Flashmob preset when adding an instance.\nYou can save other presets by saving Flashmob containers\nas FX chains in the Flashmob Preset Location below.", 1)				
+
+				local button_pos_x = (width * 0.5) - ((width * 0.75) * 0.5)
+				local button_width = width * 0.75
+				local preset_loc_text = "Open Presets Location"
+				local preset_loc_text_clipped = ClipText(preset_loc_text, button_width - win_padding_x)
+
+				reaper.ImGui_SetCursorPosX(ctx, button_pos_x)
+				if reaper.ImGui_Button(ctx, preset_loc_text_clipped, button_width, 30) then
+					if user_os == "Mac" then
+						os.execute('open "' .. script_path .. 'FXChains"')
+					elseif user_os == "Win" then
+						os.execute('start "" "' .. script_path .. 'FXChains"')
+					end
+				end
+				if preset_loc_text_clipped ~= preset_loc_text then ToolTip(preset_loc_text, 1) end
+
+				reaper.ImGui_Dummy(ctx, 0, 0)
+
+				if slower_defer_update then -- refresh the first frame settings page is open
+					t_fxchains = GetFXChainsList()
+					-- If FXCHain is missing, set the first one as the default one.
+					if not reaper.file_exists(script_path .. "FXChains/" .. default_preset .. ".RfxChain") then
+						current_preset = 0
+						if t_fxchains[1] then
+							default_preset = t_fxchains[1]
+						else
+							default_preset = "Flashmob_Demo" -- Will trigger an "controlled" error when adding Flashmob as the FXChains folder is empty. It's normal.
+						end
+						reaper.SetExtState("vf_flashmob", "default_preset", default_preset, 1)
+					else
+						for i=1, #t_fxchains do
+							if t_fxchains[i] == default_preset then
+								current_preset = i - 1
+								break
+							end
+						end	
+					end					
+				end
+
+				flashmob_presets = table.concat(t_fxchains, "\0") .. "\0" -- Convert table into a null-terminated string for the ListBox object
+
+				if not current_preset then
+					current_preset = 0 				
+				end
+
+				if t_fxchains[1] then -- If FXChains folder is not empty
+					reaper.ImGui_SetNextItemWidth(ctx, width)
+					rv_default_preset, current_preset = reaper.ImGui_ListBox(ctx, "##Default_Preset_List", current_preset, flashmob_presets, 8)
+					if rv_default_preset then
+						default_preset = t_fxchains[current_preset + 1]
+						reaper.SetExtState("vf_flashmob", "default_preset", default_preset, 1)
+					end
+				end
+
+				reaper.ImGui_TextDisabled(ctx, "(More info)")
+				ToolTip("Set the default Flashmob preset when adding an instance.\nYou can save other presets by saving Flashmob containers\nas FX chains in the Flashmob presets location above.", 1)
 
 				reaper.ImGui_EndChild(ctx)
 			end
@@ -3502,7 +3641,7 @@ function Frame()
 							local param_name_color
 							if track_color == UI_color then param_name_color = white else param_name_color = track_color end
 							reaper.ImGui_TextColored(ctx, param_name_color, param_name_clipped)
-							if param_name_clipped ~= param_name then ToolTip(param_name) end
+							if param_name_clipped ~= param_name then ToolTip(param_name,1) end
 
 							reaper.ImGui_PopFont(ctx)
 
@@ -3855,7 +3994,7 @@ function Frame()
 
 									text_param_link_clipped = ClipText(text_param_link, width - win_padding_x * 2)
 									reaper.ImGui_TextColored(ctx, amount_error_text_color, text_param_link_clipped)
-									if text_param_link_clipped ~= text_param_link then ToolTip(text_param_link) end							
+									if text_param_link_clipped ~= text_param_link then ToolTip(text_param_link, 1) end							
 
 									-- Dummy slider (to keep the window size and avoid constant annoying redrawing)
 									local rv_dummy, dummy
@@ -4117,9 +4256,22 @@ function Frame()
 				reaper.ImGui_PopFont(ctx)
 				ToolTip("Click to enable FLASHMOB modulations & macros on this track")
 				if rv_addContainer then
-					reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts Beta/Flashmob/Flashmob.RfxChain", false, 1000)	-- last argument adds an instance if one is not found at the first FX chain index				
-					reaper.TrackFX_CopyToTrack(track, reaper.TrackFX_GetCount(track)-1, track, 0, 1) -- Move Flashmob to the first FX chain slot
-					reload_settings = true
+					-- reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts Beta/Flashmob/Flashmob.RfxChain", false, 1000)	-- last argument adds an instance if one is not found at the first FX chain index				
+					if reaper.file_exists(script_path .. "FXChains/" .. default_preset .. ".RfxChain") then
+						AddFlashmobInstance(track, 1)
+						reload_settings = true						
+						-- local openFloating_setting = reaper.SNM_GetIntConfigVar("fxfloat_focus", -666) -- Save the original user setting to open or not floating window when adding new FX
+						-- reaper.SNM_SetIntConfigVar("fxfloat_focus", openFloating_setting&(~4)) -- Temporarly disable the user setting
+						-- reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts Beta/Flashmob/FXChains/" .. default_preset  .. ".RfxChain", false, 1024)	-- last argument adds an instance if one is not found at the first FX chain index				
+						-- reaper.TrackFX_CopyToTrack(track, reaper.TrackFX_GetCount(track)-1, track, 0, 1) -- Move Flashmob to the first FX chain slot
+						-- reaper.SNM_SetIntConfigVar("fxfloat_focus", openFloating_setting) -- Restore user setting						
+					else
+						if user_os == "Win" then
+							StartModalWorkaround("error_missing_fxchain" .. str_index)
+						else	
+							reaper.ShowMessageBox(script_path .. "FXChains/" .. default_preset .. ".RfxChain file is missing.\n\nPlease, choose another default preset in the script settings or reinstall the script.", "ERROR", 0)
+						end								
+					end
 				end	
 			end
 		end
@@ -4127,6 +4279,18 @@ function Frame()
 	else
 		reaper.ImGui_Text(ctx, "No selected track")
 	end
+
+
+	-- Reaper native modal error messages (Windows workaround)
+	if user_os == "Win" and modal_popup_id == "error_missing_fxchain" and modal_popup == true then
+		reaper.ShowMessageBox(script_path .. "FXChains/" .. default_preset .. ".RfxChain file is missing.\n\nPlease, choose another default preset in the script settings or reinstall the script.", "ERROR", 0)
+		ResetModalWorkaroundVariables()
+	end	
+
+	if user_os == "Win" and modal_popup_id == "map_no_param" and modal_popup == true then
+		reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)		
+		ResetModalWorkaroundVariables()
+	end				
 
 
 	local popup_open = reaper.ImGui_IsPopupOpen(ctx, "", reaper.ImGui_PopupFlags_AnyPopupId() | reaper.ImGui_PopupFlags_AnyPopupLevel()) -- Check if any popup is opened	
