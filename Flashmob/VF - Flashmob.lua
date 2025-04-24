@@ -2,7 +2,7 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.3.7
+-- @Version 0.3.8
 -- @Changelog
 --   Fixing modal window bug on Windows
 -- @Provides
@@ -1424,8 +1424,31 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 				if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Alt()) then																				
 					local current_val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
 					reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, current_val) -- To set as last touched param
-					UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
+
+					local unlink_confirmed
+					if user_os == "Win" then
+						StartModalWorkaround("remove_mapping_mod_assign_list" .. i)
+					else	
+						local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
+						if user_input_remove_mapping == 6 then -- YES
+							unlink_confirmed = true
+						end	
+					end					
+					-- UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
 				end				
+
+				if user_os == "Win" and modal_popup_id == "remove_mapping_mod_assign_list" .. i and modal_popup == true then
+					local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
+					if user_input_remove_mapping == 6 then -- YES
+						unlink_confirmed = true
+					end			
+					ResetModalWorkaroundVariables()
+				end										
+
+				if unlink_confirmed == true then									
+					UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
+				end
+
 
 				-- Draw the param name with the determined color
 				reaper.ImGui_SameLine(ctx)
@@ -1691,8 +1714,30 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 				if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Alt()) then																				
 					local current_val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
 					reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, current_val) -- To set as last touched param
+
+					local unlink_confirmed
+					if user_os == "Win" then
+						StartModalWorkaround("remove_mapping_macro_assign_list" .. i)
+					else	
+						local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
+						if user_input_remove_mapping == 6 then -- YES
+							unlink_confirmed = true
+						end	
+					end	
+					-- UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
+				end		
+
+				if user_os == "Win" and modal_popup_id == "remove_mapping_macro_assign_list" .. i and modal_popup == true then
+					local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
+					if user_input_remove_mapping == 6 then -- YES
+						unlink_confirmed = true
+					end			
+					ResetModalWorkaroundVariables()
+				end										
+
+				if unlink_confirmed == true then									
 					UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
-				end								
+				end
 
 				-- Draw the text with the determined color
 				reaper.ImGui_SameLine(ctx)
@@ -3706,22 +3751,11 @@ function Frame()
 									-- reaper.ImGui_PopStyleColor(ctx, 1)
 									ToolTip("Left-click: Enable/disable modulation\nAlt-click: Delete modulation")
 
+									local unlink_confirmed
 									if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
 
-										-- Logic to active or de-active modulation
-										if not reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Alt()) then
-											if t_pm_data.link_active == 0 then	  
-												t_pm_data.link_active = 1
-												reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.active", 1)
-											else
-												t_pm_data.link_active = 0
-												reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.active", 0)
-												reaper.TrackFX_SetParam(track, t_last_param.fx, t_last_param.param, t_pm_data.baseline)
-											end
-
 										-- Delete modulation (while holding ALT)
-										else											
-											local unlink_confirmed
+										if reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Alt()) then
 											if user_os == "Win" then
 												StartModalWorkaround("remove_mapping")
 											else	
@@ -3730,20 +3764,30 @@ function Frame()
 													unlink_confirmed = true
 												end	
 											end
-											-- UnlinkParam(track, t_last_param.fx, t_last_param.param)
 
-											if user_os == "Win" and modal_popup_id == "remove_mapping" and modal_popup == true then
-												local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
-												if user_input_remove_mapping == 6 then -- YES
-													unlink_confirmed = true
-												end			
-												ResetModalWorkaroundVariables()
-											end										
-
-											if unlink_confirmed == true then									
-												UnlinkParam(track, t_last_param.fx, t_last_param.param)
+										-- Logic to active or de-active modulation											
+										else
+											if t_pm_data.link_active == 0 then	  
+												t_pm_data.link_active = 1
+												reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.active", 1)
+											else
+												t_pm_data.link_active = 0
+												reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.active", 0)
+												reaper.TrackFX_SetParam(track, t_last_param.fx, t_last_param.param, t_pm_data.baseline)
 											end
 										end
+									end
+
+									if user_os == "Win" and modal_popup_id == "remove_mapping" and modal_popup == true then
+										local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
+										if user_input_remove_mapping == 6 then -- YES
+											unlink_confirmed = true
+										end			
+										ResetModalWorkaroundVariables()
+									end										
+
+									if unlink_confirmed == true then									
+										UnlinkParam(track, t_last_param.fx, t_last_param.param)
 									end
 
 									-- Get MOD or MACRO color
