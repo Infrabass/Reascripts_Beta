@@ -2,11 +2,9 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.4.2
+-- @Version 0.4.3
 -- @Changelog
---   Fix modal window bug on Windows
---   Add default preset feature in setting
---   Avoid auto-opening Flashmob window when inserting even if the user setting is to "Auto-float newly created FX windows"
+--   Midi learn on MacOS in now fixed
 -- @Provides
 --   [main] VF - Flashmob.lua
 --   vf_FLASHMOB.jsfx
@@ -78,6 +76,8 @@ Full Changelog:
 		+ Fix modal window bug on Windows
 		+ Add default preset feature in setting
 		+ Avoid auto-opening Flashmob window when inserting even if the user setting is to "Auto-float newly created FX windows"	
+	v0.4.3
+		+ Midi learn on MacOS in now fixed
 
 
 ]]
@@ -1957,6 +1957,20 @@ function DrawNativeLFO(track, fx, param)
 			reaper.ImGui_Dummy(ctx, 0, 10)
 
 			reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 0) -- Un-round the sliders
+			-- LFO strength
+			local text_lfo_strength = "Strength"
+			local text_lfo_strength_clipped = ClipText(text_lfo_strength, GetLabelMaxWidth())
+			rv_lfo_strength, t_lfo_params.lfo_strength = reaper.ImGui_SliderDouble(ctx, text_lfo_strength_clipped, t_lfo_params.lfo_strength, 0, 1, string.format("%.2f", t_lfo_params.lfo_strength * 100), reaper.ImGui_SliderFlags_NoInput())
+			if rv_lfo_strength then				
+				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.strength", t_lfo_params.lfo_strength)
+			end				
+			if text_lfo_strength_clipped ~= text_lfo_strength then ToolTip(text_lfo_strength, 1) end	
+			if reaper.ImGui_IsItemActive(ctx) then
+				lfo_strength_adjust = 1
+			else
+				lfo_strength_adjust = nil
+			end
+			
 			-- LFO shape
 			local shape_format
 			if t_lfo_params.lfo_shape < 1 then
@@ -2042,19 +2056,6 @@ function DrawNativeLFO(track, fx, param)
 			end				
 			if text_lfo_phase_clipped ~= text_lfo_phase then ToolTip(text_lfo_phase, 1) end	
 
-			-- LFO strength
-			local text_lfo_strength = "Strength"
-			local text_lfo_strength_clipped = ClipText(text_lfo_strength, GetLabelMaxWidth())
-			rv_lfo_strength, t_lfo_params.lfo_strength = reaper.ImGui_SliderDouble(ctx, text_lfo_strength_clipped, t_lfo_params.lfo_strength, 0, 1, string.format("%.2f", t_lfo_params.lfo_strength * 100), reaper.ImGui_SliderFlags_NoInput())
-			if rv_lfo_strength then				
-				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.strength", t_lfo_params.lfo_strength)
-			end				
-			if text_lfo_strength_clipped ~= text_lfo_strength then ToolTip(text_lfo_strength, 1) end	
-			if reaper.ImGui_IsItemActive(ctx) then
-				lfo_strength_adjust = 1
-			else
-				lfo_strength_adjust = nil
-			end
 			reaper.ImGui_PopStyleVar(ctx)
 
 			-- LFO direction
@@ -2454,7 +2455,7 @@ function DrawIcon(width, height, color, track, fx, param, state, icon)
 		ToolTip("Enable/disable Native Audio Follower")
 	elseif icon == 3 then
 		Midi(draw_list, x, y, 13, height, icon_color, 2)
-		ToolTip("MIDI learn, currently not working on MacOS due to a Reaper bug")
+		ToolTip("MIDI learn")
 	end	
 
 	-- On button click
@@ -2975,7 +2976,7 @@ function Init()
 			error('ReaImGui is not installed or too old.')
 		end
 		package.path = reaper.ImGui_GetBuiltinPath() .. '/?.lua'
-		return require 'imgui' '0.9.2'
+		return require 'imgui' '0.9.3.3'
 	end)
 	if not ok then
 		reaper.MB("Please right-click and install 'ReaImGui: ReaScript binding for Dear ImGui'.\n\nThen restart REAPER and run the script again.\n", "ReaImGui API is not installed or too old", 0)
@@ -4125,9 +4126,11 @@ function Frame()
 								end
 
 							else
+								reaper.ImGui_PushTextWrapPos(ctx, width)
 								local invalid_flashmob_text = "Khs SnapHeap plugin is probably missing\nPlease read the manual for more info"
-								invalid_flashmob_text = WrapText(invalid_flashmob_text, width)
+								-- invalid_flashmob_text = WrapText(invalid_flashmob_text, width)								
 								reaper.ImGui_Text(ctx, invalid_flashmob_text)
+								reaper.ImGui_PopTextWrapPos(ctx)
 							end
 							reaper.ImGui_EndTabItem(ctx)
 						end
