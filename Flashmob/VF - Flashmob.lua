@@ -2,11 +2,10 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.4.2
+-- @Version 0.5
 -- @Changelog
---   Fix modal window bug on Windows
---   Add default preset feature in setting
---   Avoid auto-opening Flashmob window when inserting even if the user setting is to "Auto-float newly created FX windows"
+--   Add assignation lists in MOD and MACRO tabs
+--   Add a powerful OVERVIEW page to see all the modulated parameters on the selected track (magnifying glass icon)
 -- @Provides
 --   [main] VF - Flashmob.lua
 --   vf_FLASHMOB.jsfx
@@ -57,7 +56,7 @@ Full Changelog:
 		+ If Snapheap is missing, let the user use Flashmob for the MACROS & the NATIVE tabs and only disable the MODS tab
 	v0.3
 		+ Use graphics instead of drawing shapes for icons
-		+ Add a line of buttons above LAST FX PARAM (Settings, Help, Enable Macro Modulation, Lock, Add Instance)
+		+ Add a line of buttons above LAST FX PARAM (Overview, Help, Enable Macro Modulation, Lock, Add Instance)
 		+ Fix bug: Macro slider modulated by another FLASHMOB move their offset instead of the mod range
 		+ By default, tweaking MACROS don't update the last-touched FX param. Add a button to activate the MACROS MODULATION
 		+ Set border color to MOD or MACRO linked to last-touched FX param
@@ -78,6 +77,11 @@ Full Changelog:
 		+ Fix modal window bug on Windows
 		+ Add default preset feature in setting
 		+ Avoid auto-opening Flashmob window when inserting even if the user setting is to "Auto-float newly created FX windows"	
+	v0.4.3
+		+ Midi learn on MacOS in now fixed
+	v0.5
+		+ Add assignation lists in MOD and MACRO tabs
+		+ Add a powerful OVERVIEW page to see all the modulated parameters on the selected track (magnifying glass icon)
 
 
 ]]
@@ -666,8 +670,8 @@ end
 
 function GetAssignations(track, fx, param)
 	local t_assignations = {}
-	for i=0, reaper.TrackFX_GetCount(track) -1 do
-		local total_fx = reaper.TrackFX_GetCount(track)
+	local total_fx = reaper.TrackFX_GetCount(track)	
+	for i=0, total_fx -1 do
 		for j=0, reaper.TrackFX_GetNumParams(track, i) -1 do
 			local _, link_active = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".plink.active") 			
 			local _, link_source_fx = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".plink.effect") 
@@ -678,11 +682,13 @@ function GetAssignations(track, fx, param)
 
 			if link_active == 1 and link_source_fx == fx and link_source_param == param then
 				local _, fx_name = reaper.TrackFX_GetFXName(track, i)
+				local fx_name_raw = fx_name
 				fx_name = fx_name:gsub('——', '-') -- Workaround to replace "2 long dashes" characters with one small dash (used by Flashmob)
 				fx_name = fx_name:gsub('—', '-') -- Workaround to replace "1 long dashes" characters with one small dash (used by Flashmob)
+				fx_name = SimplifyPluginNames(fx_name)
 				fx_name = fx_name .. " (" .. i + 1 .. "/" .. total_fx .. ")"
 				local _, param_name = reaper.TrackFX_GetParamName(track, i, j)
-				t_assignations[#t_assignations+1] = {fx_id = i, param_id = j, fx_name = fx_name, param_name = param_name}
+				t_assignations[#t_assignations+1] = {fx_id = i, param_id = j, fx_name = fx_name, fx_name_raw = fx_name_raw, param_name = param_name}
 			end
 		end
 	end
@@ -717,6 +723,8 @@ function ToggleNativeLFO(track, fx, param, state)
 			reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.strength", 0.25)
 			reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.dir", 0)
 		end
+
+		reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".mod.active", 1) -- active PM
 	end
 
 	reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".mod.baseline", new_baseline)
@@ -754,6 +762,8 @@ function ToggleNativeACS(track, fx, param, state)
 			reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.stereo", 1)
 			reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.attack", 150)
 		end
+
+		reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".mod.active", 1)	-- Active PM
 	end	
 
 	reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".mod.baseline", new_baseline)			
@@ -895,6 +905,69 @@ function AddFlashmobInstance(track, first_slot)
 	end
 	reaper.SNM_SetIntConfigVar("fxfloat_focus", openFloating_setting) -- Restore user setting						
 end	
+
+function OpenSnapheap(track, fx, index)
+	-- The following function TrackFX_Show() is working with an index of FX in container based-1 instead of based-0
+	local offset = 1
+	if index >= 3 and index <= 4 then offset = 2 end
+	if index >= 5 and index <= 6 then offset = 3 end
+	local fxCount = reaper.TrackFX_GetCount(track)
+
+	local snapheap_index = 0x2000000 + ((offset + 1) * (fxCount + 1)) + (fx + 1) -- (index of FX in container + 1) * (fxchain count + 1) + (index of container + 1)
+
+	-- Close all other Snap Heap FX windows
+	for i=1, 3 do
+		local snapheap_index_current = 0x2000000 + ((i + 1) * (fxCount + 1)) + (fx + 1)
+		if snapheap_index ~= snapheap_index_current then
+			reaper.TrackFX_Show(track, snapheap_index_current, 2)
+		end
+	end
+	
+	local open = reaper.TrackFX_GetOpen(track, snapheap_index)
+	if open == true then
+		reaper.TrackFX_Show(track, snapheap_index, 2)
+	else
+		reaper.TrackFX_Show(track, snapheap_index, 3)
+		-- reaper.SetCursorContext(1)
+	end
+end
+
+function GetOverview(track)
+	local t_overview = {}
+	local total_fx = reaper.TrackFX_GetCount(track)	
+	for i=0, total_fx -1 do
+		-- t_overview[#t_overview+1] = {fx_id = i, fx_name = fx_name}
+		for j=0, reaper.TrackFX_GetNumParams(track, i) -1 do
+			local _, mod_active = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".mod.active") 			
+			local _, link_active = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".plink.active") 			
+			local _, link_source_fx = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".plink.effect") 
+			local _, link_source_param = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".plink.param")
+			local _, lfo_active = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".lfo.active")
+			local _, acs_active = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".acs.active")
+			local _, midi_learn = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".learn.midi1")
+			mod_active = tonumber(mod_active)			
+			link_active = tonumber(link_active)
+			link_source_fx = tonumber(link_source_fx)
+			link_source_param = tonumber(link_source_param)
+			lfo_active = tonumber(lfo_active)
+			acs_active = tonumber(acs_active)
+			midi_learn = tonumber(midi_learn)
+
+			-- if link_active == 1 or lfo_active == 1 or acs_active == 1 then
+			if mod_active == 1 then
+				local _, fx_name = reaper.TrackFX_GetFXName(track, i)
+				local fx_name_raw = fx_name
+				fx_name = fx_name:gsub('——', '-') -- Workaround to replace "2 long dashes" characters with one small dash (used by Flashmob)
+				fx_name = fx_name:gsub('—', '-') -- Workaround to replace "1 long dashes" characters with one small dash (used by Flashmob)
+				fx_name = SimplifyPluginNames(fx_name)
+				fx_name = fx_name .. " (" .. i + 1 .. "/" .. total_fx .. ")"
+				local _, param_name = reaper.TrackFX_GetParamName(track, i, j)
+				t_overview[#t_overview+1] = {fx_id = i, param_id = j, fx_name = fx_name, fx_name_raw = fx_name_raw, param_name = param_name, link_active = link_active, lfo_active = lfo_active, acs_active = acs_active, midi_learn = midi_learn}
+			end
+		end
+	end
+	return t_overview
+end
 
 ------------------------------------------------------------------------------------
 -- GUI
@@ -1280,11 +1353,27 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 	reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Button(), mod_button_color)
 	reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonActive(), DarkerColor(mod_button_color))
 	reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonHovered(), mod_button_color)	
-	local visible = reaper.ImGui_BeginChild(ctx, 'Mod_Child' .. str_index, 0, 76, reaper.ImGui_ChildFlags_Border(), window_flags)
+
+	if not _G["modChild_height" .. index] then _G["modChild_height" .. index] = 76 end
+	if _G["modList" .. index] == 1 and slower_defer_update then 
+		t_assignations = GetAssignations(track, fx, mod_param_id) -- Need to optimize this potentially intense function
+		if #t_assignations == 0 then
+			_G["modChild_height" .. index] = 76 + 28
+		else
+			_G["modChild_height" .. index] = 76 + 12 + 40 * #t_assignations
+		end
+	elseif _G["modList" .. index] == 0 then
+		_G["modChild_height" .. index] = 76
+	end
+
+	local visible = reaper.ImGui_BeginChild(ctx, 'Mod_Child' .. str_index, 0, _G["modChild_height" .. index], reaper.ImGui_ChildFlags_Border(), window_flags)
 	if visible then
 
 		-- MAP button		
 		-- reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Button(), t_color_palette[index])
+		-- reaper.ImGui_BeginGroup(ctx)
+
+		-- reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 0)
 		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonHovered(), BrighterColor(t_color_palette[index]))
 		reaper.ImGui_PushFont(ctx, fonts.medium_bold)
 		local link_confirmed
@@ -1320,9 +1409,8 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 				else	
 					reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)
 				end				
-				-- reaper.ShowMessageBox("\nYou must adjust an FX parameter before mapping to this modulator", "MAPPING FAILED", 0)
 			end
-		end	
+		end			
 
 		if user_os == "Win" and modal_popup_id == "mod_overwrite" .. str_index and modal_popup == true then
 			local _, link_source_param_name = reaper.TrackFX_GetParamName(track, t_pm_data.link_source_fx, t_pm_data.link_source_param)
@@ -1345,22 +1433,43 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 			LinkParam(track, touched_fx, fx, touched_param, mod_param_id, new_baseline, param_is_linked_to_anything, true)
 		end		
 
-		reaper.ImGui_PopFont(ctx)				
+		-- reaper.ImGui_PopFont(ctx)				
 
-		if param_is_linked_to_anything == 1 then			
+		if param_is_linked_to_anything == 1 then		
 			ToolTip("Remap [" .. t_last_param.param_name .. "] to MOD " .. index)	
 		else
 			if t_last_param.param then 
 				ToolTip("Map [" .. t_last_param.param_name .. "] to MOD " .. index)
 			end
 		end
+
+		-- reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 0)
+		-- if reaper.ImGui_Button(ctx, "List", 40, 16) then
+		-- 	if not _G["modList" .. index] then _G["modList" .. index] = 0 end
+		-- 	if not _G["modPopup" .. index] then _G["modPopup" .. index] = 0 end
+		-- 	-- Close all the other mod assign list before opening this one
+		-- 	for i=1, 6 do
+		-- 		if i ~= index then
+		-- 			_G["modList" .. i] = 0
+		-- 			_G["modPopup" .. i] = 0
+		-- 		end
+		-- 	end			
+		-- 	_G["modList" .. index] = 1 - _G["modList" .. index]
+		-- 	_G["modPopup" .. index] = 1 - _G["modPopup" .. index]			
+		-- end
+		-- reaper.ImGui_PopStyleVar(ctx, 1)
+
+		-- reaper.ImGui_EndGroup(ctx)
+
+		reaper.ImGui_PopFont(ctx)		
 		reaper.ImGui_PopStyleColor(ctx, 1)
+		-- reaper.ImGui_PopStyleVar(ctx, 1)
 		reaper.ImGui_SameLine(ctx)
 
 		-- Draw vertical separation line
 		local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
 		local x, y = reaper.ImGui_GetCursorScreenPos(ctx)
-		reaper.ImGui_DrawList_AddLine(draw_list, x - 2, y - win_padding_y, x - 2, y + 76, mod_border_color, vertical_line_border_size)
+		reaper.ImGui_DrawList_AddLine(draw_list, x - 2, y - win_padding_y, x - 2, y + 76 - win_padding_y, mod_border_color, vertical_line_border_size)
 		reaper.ImGui_SameLine(ctx)
 		reaper.ImGui_Dummy(ctx, 4, 0)
 		reaper.ImGui_SameLine(ctx)
@@ -1392,140 +1501,208 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 
 		-- Open Snap Heap
 		if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
-			-- The following function TrackFX_Show() is working with an index of FX in container based-1 instead of based-0
-			local offset = 1
-			if index >= 3 and index <= 4 then offset = 2 end
-			if index >= 5 and index <= 6 then offset = 3 end
-			local fxCount = reaper.TrackFX_GetCount(track)
-
-			local snapheap_index = 0x2000000 + ((offset + 1) * (fxCount + 1)) + (fx + 1) -- (index of FX in container + 1) * (fxchain count + 1) + (index of container + 1)
-
-			-- Close all other Snap Heap FX windows
-			for i=1, 3 do
-				local snapheap_index_current = 0x2000000 + ((i + 1) * (fxCount + 1)) + (fx + 1)
-				if snapheap_index ~= snapheap_index_current then
-					reaper.TrackFX_Show(track, snapheap_index_current, 2)
-				end
-			end
-			
-			local open = reaper.TrackFX_GetOpen(track, snapheap_index)
-			if open == true then
-				reaper.TrackFX_Show(track, snapheap_index, 2)
-			else
-				reaper.TrackFX_Show(track, snapheap_index, 3)
-				-- reaper.SetCursorContext(1)
-			end
+			OpenSnapheap(track, fx, index)
 		end
 
-		reaper.ImGui_OpenPopupOnItemClick(ctx, 'mod_popup' .. str_index, reaper.ImGui_PopupFlags_MouseButtonRight())				
+		-- Open assignations list
+		if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Right()) then
+			if not _G["modList" .. index] then _G["modList" .. index] = 0 end
+			if not _G["modPopup" .. index] then _G["modPopup" .. index] = 0 end
+			-- Close all the other mod assign list before opening this one
+			for i=1, 6 do
+				if i ~= index then
+					_G["modList" .. i] = 0
+					_G["modPopup" .. i] = 0
+				end
+			end			
+			_G["modList" .. index] = 1 - _G["modList" .. index]
+			_G["modPopup" .. index] = 1 - _G["modPopup" .. index]
+		end
 
-		-- Modulator assignations popup
-		-- if reaper.ImGui_BeginPopupContextItem(ctx, 'mod_popup') then
-		if reaper.ImGui_BeginPopup(ctx, 'mod_popup' .. str_index) then
+		if _G["modList" .. index] == 1 then
 			local popup_width, popup_height = reaper.ImGui_GetWindowSize(ctx)
-			local x, y = reaper.ImGui_GetCursorPos( ctx )
-			reaper.ImGui_SetCursorPos(ctx, (popup_width * 0.5) - (width * 0.5), y)
-			reaper.ImGui_PushFont(ctx, fonts.medium_bold)
-			if reaper.ImGui_Button(ctx, "MOD " .. index, width) then
-				-- reaper.TrackFX_SetParam(track, fx, macro_param_id, macro_val) -- To set as last touched param
-				-- Command(41145) -- FX: Set alias for last touched FX parameter
-			end		
-			reaper.ImGui_PopFont(ctx)	
-			-- ToolTip("Click to rename Macro")
+			local screen_x, screen_y = reaper.ImGui_GetCursorScreenPos(ctx)
+			reaper.ImGui_DrawList_AddLine(draw_list, screen_x - win_padding_x, screen_y + 4, screen_x + width - win_padding_x, screen_y + 4, mod_border_color, vertical_line_border_size)
 
 			-- if slower_defer_update then
 				t_assignations = GetAssignations(track, fx, mod_param_id) -- Need to optimize this potentially intense function
 			-- end
-			for i=1, #t_assignations do
-				-- Use a dummy invisible button to detect hover first
-				local assignation_color = DarkerColor(t_color_palette[index], 4)
-				local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, t_assignations[i].param_name)
-				local x, y = reaper.ImGui_GetCursorPos( ctx )
-				reaper.ImGui_InvisibleButton(ctx, "hover_area", text_size_x, text_size_y)
-				ToolTip("Alt-click: Delete assignation")
 
-				if reaper.ImGui_IsItemHovered(ctx) then
-					assignation_color = BrighterColor(t_color_palette[index], 1)
-				end
+			overview_baseline = nil
+			overview_scale = nil
 
-				-- Set as last touched parameter
-				if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
-					local current_val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
-					reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, current_val) -- To set as last touched param
-				end		
 
-				-- Delete modulation
-				if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Alt()) then																				
-					local current_val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
-					reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, current_val) -- To set as last touched param
+			if #t_assignations == 0 then
+				reaper.ImGui_Dummy(ctx, 0, 7)
+				reaper.ImGui_Text(ctx, "No assignation")
+			else
+				for i=1, #t_assignations do
+					if i == 1 then reaper.ImGui_Dummy(ctx, 0, 6) end
+					-- Use a dummy invisible button to detect hover first
+					-- local assignation_color = DarkerColor(t_color_palette[index], 4)
+					local assignation_color = DarkerColor2(t_color_palette[index], 0.1)
+					local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, t_assignations[i].param_name)
+					local x, y = reaper.ImGui_GetCursorPos( ctx )
+					-- reaper.ImGui_SetCursorPos(ctx, x, y + 8)
+					reaper.ImGui_InvisibleButton(ctx, "hover_area", text_size_x, text_size_y)
+					ToolTip("Alt-click: Delete assignation")
 
-					local unlink_confirmed
-					if user_os == "Win" then
-						StartModalWorkaround("remove_mapping_mod_assign_list" .. i)
-					else	
+					if reaper.ImGui_IsItemHovered(ctx) then
+						-- assignation_color = BrighterColor(t_color_palette[index], 1)
+						assignation_color = BrighterColor2(t_color_palette[index], 0.3)
+					end
+
+					-- Set as last touched parameter
+					if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+						local current_val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+						reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, current_val) -- To set as last touched param
+					end		
+
+					-- Delete modulation
+					local unlink_confirmed					
+					if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Alt()) then																				
+						local current_val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+						reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, current_val) -- To set as last touched param
+
+						if user_os == "Win" then
+							StartModalWorkaround("remove_mapping_mod_assign_list" .. i)
+						else	
+							local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
+							if user_input_remove_mapping == 6 then -- YES
+								unlink_confirmed = true
+							end	
+						end					
+						-- UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
+					end				
+
+					if user_os == "Win" and modal_popup_id == "remove_mapping_mod_assign_list" .. i and modal_popup == true then
 						local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
 						if user_input_remove_mapping == 6 then -- YES
 							unlink_confirmed = true
-						end	
+						end			
+						ResetModalWorkaroundVariables()
+					end										
+
+					if unlink_confirmed == true then									
+						UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
+					end
+
+
+					-- Draw the param name with the determined color
+					reaper.ImGui_SameLine(ctx)
+					reaper.ImGui_SetCursorPos(ctx, x, y)			
+					reaper.ImGui_TextColored(ctx, assignation_color, t_assignations[i].param_name)
+
+					-- Draw FX name if this is a new FX
+					if i == 1 or t_assignations[i].fx_id ~= t_assignations[i-1].fx_id then
+						reaper.ImGui_SameLine(ctx)
+						local assignation_color = white
+						local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, t_assignations[i].fx_name)
+						local x, y = reaper.ImGui_GetCursorPos( ctx )
+						reaper.ImGui_InvisibleButton(ctx, "hover_area_fx", text_size_x, text_size_y)
+
+						if reaper.ImGui_IsItemHovered(ctx) then
+							assignation_color = full_white
+						end
+
+						-- Open FX
+						if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+							if reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Ctrl()) then
+								reaper.TrackFX_Show(track, t_assignations[i].fx_id, 3) -- In floating window					
+							else
+								reaper.TrackFX_Show(track, t_assignations[i].fx_id, 1) -- In FXchain	
+							end
+						end					
+
+						-- Draw the fx name
+						reaper.ImGui_SameLine(ctx)
+						reaper.ImGui_PushFont(ctx, fonts.small)
+						reaper.ImGui_SetCursorPos(ctx, x, y + 3)
+						local width_for_fxName = reaper.ImGui_GetContentRegionAvail(ctx)
+						local fx_name_clipped = ClipText(t_assignations[i].fx_name, width_for_fxName)
+						reaper.ImGui_TextColored(ctx, assignation_color, fx_name_clipped)
+						if fx_name_clipped ~= t_assignations[i].fx_name then ToolTip(t_assignations[i].fx_name) end
+						reaper.ImGui_PopFont(ctx)
+					end
+
+					-- Show baseline and mod amount sliders
+					reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 0)
+					reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrab(), t_color_palette[index])
+					reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrabActive(), t_color_palette[index])
+
+					local val, min, max = reaper.TrackFX_GetParamEx(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+					local _, offset = reaper.TrackFX_GetNamedConfigParm(track, t_assignations[i].fx_id, "param." .. t_assignations[i].param_id .. ".mod.baseline")
+					local offset_formatted
+
+					if max ~= 1 then -- If effect is a JSFX
+						-- last_touched_param_value = (last_touched_param_value / max) - min -- Useful for JSFX with parameter value range > 1
+						offset_formatted = offset
+						offset_formatted = string.format("%.2f", offset_formatted)
+					else
+						rv, offset_formatted = reaper.TrackFX_FormatParamValueNormalized(track, t_assignations[i].fx_id, t_assignations[i].param_id, offset, "")												
+						offset_formatted = ReplaceRareUnicode(offset_formatted)							
+					end
+
+					offset_formatted = offset_formatted:gsub("%%", "%%%%")
+
+					-- Special case of plugins not supporting the Cockos VST extension (hard-coded)
+					if t_assignations[i].fx_name_raw:find("Valhalla DSP") then
+						local baseline_rounded = string.format("%.2f", offset)
+						offset_formatted = baseline_rounded
+					end
+
+
+					reaper.ImGui_SetNextItemWidth(ctx, popup_width * 0.5 - (win_padding_x * 2))
+					local rv_offset, offset = reaper.ImGui_SliderDouble(ctx, "##offset" .. i, offset, min, max, offset_formatted)
+					-- local rv_offset, offset = reaper.ImGui_SliderDouble(ctx, "##offset" .. i, offset, min, max)
+					if rv_offset then
+
+						-- active as last-touched FX param
+						local val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+						reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, val)
+
+						reaper.TrackFX_SetNamedConfigParm(track, t_assignations[i].fx_id, "param." .. t_assignations[i].param_id .. ".mod.baseline", offset)
+					end
+
+					-- show mod range
+					if reaper.ImGui_IsItemActive(ctx) then
+						overview_baseline = 1
+					end	
+
+					reaper.ImGui_SameLine(ctx)
+
+					local _, amount = reaper.TrackFX_GetNamedConfigParm(track, t_assignations[i].fx_id, "param." .. t_assignations[i].param_id .. ".plink.scale")
+					local amount_formatted = string.format('%.1f %%%%', amount * 100)
+
+					reaper.ImGui_SetNextItemWidth(ctx, popup_width * 0.5 - (win_padding_x * 2))
+					local rv_amount, amount = reaper.ImGui_SliderDouble(ctx, "##amount" .. i, amount, -1, 1, amount_formatted)
+					if rv_amount then
+
+						show_mod_value = true
+
+						-- active as last-touched FX param
+						local val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+						reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, val)
+
+						reaper.TrackFX_SetNamedConfigParm(track, t_assignations[i].fx_id, "param." .. t_assignations[i].param_id .. ".plink.scale", amount)
+					end	
+
+					-- show mod range
+					if reaper.ImGui_IsItemActive(ctx) then
+						overview_scale = 1
+					end						
+
+					-- Update data
+					if rv_offset or rv_amount then
+						GetLastTouchedFXParam(track)
+						GetPMData(track, t_assignations[i].fx_id, t_assignations[i].param_id)
 					end					
-					-- UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
-				end				
 
-				if user_os == "Win" and modal_popup_id == "remove_mapping_mod_assign_list" .. i and modal_popup == true then
-					local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
-					if user_input_remove_mapping == 6 then -- YES
-						unlink_confirmed = true
-					end			
-					ResetModalWorkaroundVariables()
-				end										
-
-				if unlink_confirmed == true then									
-					UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
+					reaper.ImGui_PopStyleVar(ctx, 1)
+					reaper.ImGui_PopStyleColor(ctx, 2)
 				end
-
-
-				-- Draw the param name with the determined color
-				reaper.ImGui_SameLine(ctx)
-				reaper.ImGui_SetCursorPos(ctx, x, y)
-				-- reaper.ImGui_SetNextItemAllowOverlap(ctx)				
-				reaper.ImGui_TextColored(ctx, assignation_color, t_assignations[i].param_name)
-
-				reaper.ImGui_SameLine(ctx)
-				local assignation_color = white
-				local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, t_assignations[i].fx_name)
-				local x, y = reaper.ImGui_GetCursorPos( ctx )
-				reaper.ImGui_InvisibleButton(ctx, "hover_area_fx", text_size_x, text_size_y)
-
-				if reaper.ImGui_IsItemHovered(ctx) then
-					assignation_color = full_white
-				end
-
-				-- Open FX
-				if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Ctrl()) then
-					reaper.TrackFX_Show(track, t_assignations[i].fx_id, 3) -- In floating window					
-				elseif reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
-					reaper.TrackFX_Show(track, t_assignations[i].fx_id, 1) -- In FXchain									
-				end					
-
-				-- Draw the fx name
-				reaper.ImGui_SameLine(ctx)
-				reaper.ImGui_SetCursorPos(ctx, x, y)
-				reaper.ImGui_TextColored(ctx, assignation_color, t_assignations[i].fx_name)				
 			end
-
-			if reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_Escape()) then
-				reaper.ImGui_CloseCurrentPopup(ctx)
-			end		
-
-			reaper.ImGui_EndPopup(ctx)
-		end				
-		-- reaper.ImGui_OpenPopupOnItemClick(ctx, 'mod_popup', reaper.ImGui_PopupFlags_MouseButtonRight())				
-
-		if reaper.ImGui_IsPopupOpen(ctx, 'mod_popup' .. str_index, 0) then			
-			_G["modPopup" .. str_index] = 1
-		else
-			_G["modPopup" .. str_index] = 0
-		end	
+		end
 	
 		reaper.ImGui_EndChild(ctx)
 	end
@@ -1587,7 +1764,20 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 	reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Button(), DarkerColor(t_color_palette[mod_container_table_id], 3))
 	reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonActive(), DarkerColor(t_color_palette[mod_container_table_id]))
 	reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonHovered(), t_color_palette[mod_container_table_id])
-	local visible = reaper.ImGui_BeginChild(ctx, 'Macro_Child' .. str_index, 0, 40 + win_padding_y * 2, reaper.ImGui_ChildFlags_Border(), window_flags)
+
+	if not _G["macroChild_height" .. index] then _G["macroChild_height" .. index] = 40 + win_padding_y * 2 end
+	if _G["macroList" .. index] == 1 and slower_defer_update then 
+		t_assignations = GetAssignations(track, fx, macro_param_id) -- Need to optimize this potentially intense function
+		if #t_assignations == 0 then
+			_G["macroChild_height" .. index] = 40 + win_padding_y * 2 + 28
+		else
+			_G["macroChild_height" .. index] = 40 + win_padding_y * 2 + 18 + 39 * #t_assignations
+		end
+	elseif _G["macroList" .. index] == 0 then
+		_G["macroChild_height" .. index] = 40 + win_padding_y * 2
+	end
+
+	local visible = reaper.ImGui_BeginChild(ctx, 'Macro_Child' .. str_index, 0, _G["macroChild_height" .. index], reaper.ImGui_ChildFlags_Border(), window_flags)
 	if visible then
 
 		local x, y = reaper.ImGui_GetCursorPos(ctx)
@@ -1686,132 +1876,160 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 		end
 		reaper.ImGui_PopFont(ctx)
 
-		reaper.ImGui_OpenPopupOnItemClick(ctx, 'macro_popup' .. str_index, reaper.ImGui_PopupFlags_MouseButtonRight())		
-
-		-- Macro assignations popup
-		if reaper.ImGui_BeginPopupContextItem(ctx, 'macro_popup' .. str_index) then
-			local popup_width, popup_height = reaper.ImGui_GetWindowSize(ctx)
-			local x, y = reaper.ImGui_GetCursorPos( ctx )
-			reaper.ImGui_SetCursorPos(ctx, (popup_width * 0.5) - (width * 0.5), y)
-			reaper.ImGui_PushFont(ctx, fonts.medium_bold)
-			if reaper.ImGui_Button(ctx, macro_name, width) then
-				if user_os == "Win" then
-					StartModalWorkaround("macro_alias")
-				else					
-					reaper.TrackFX_SetParam(track, fx, macro_param_id, macro_val) -- To set as last touched param
-					Command(41145) -- FX: Set alias for last touched FX parameter
-				end
-			end		
-
-			if user_os == "Win" and modal_popup_id == "macro_alias" and modal_popup == true then
+		if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Shift()) then
+			if user_os == "Win" then
+				StartModalWorkaround("macro_alias")
+			else					
 				reaper.TrackFX_SetParam(track, fx, macro_param_id, macro_val) -- To set as last touched param
 				Command(41145) -- FX: Set alias for last touched FX parameter
-			end	
-
-			reaper.ImGui_PopFont(ctx)
-			ToolTip("Click to rename Macro")
-
-			-- if proj_updated then
-				t_assignations = GetAssignations(track, fx, macro_param_id) -- Need to optimize this potentially intense function
-			-- end
-			for i=1, #t_assignations do
-
-				assignation_color = DarkerColor(t_color_palette[mod_container_table_id], 4)
-
-				local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, t_assignations[i].param_name)
-				local x, y = reaper.ImGui_GetCursorPos( ctx )
-				reaper.ImGui_InvisibleButton(ctx, "hover_area", text_size_x, text_size_y)
-				ToolTip("Alt-click: Delete assignation")
-
-				if reaper.ImGui_IsItemHovered(ctx) then
-					assignation_color = BrighterColor(t_color_palette[mod_container_table_id])
-				end
-
-				-- Set as last touched parameter
-				if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
-					local current_val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
-					reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, current_val) -- To set as last touched param
-				end	
-
-				-- Delete modulation
-				if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Alt()) then																				
-					local current_val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
-					reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, current_val) -- To set as last touched param
-
-					local unlink_confirmed
-					if user_os == "Win" then
-						StartModalWorkaround("remove_mapping_macro_assign_list" .. i)
-					else	
-						local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
-						if user_input_remove_mapping == 6 then -- YES
-							unlink_confirmed = true
-						end	
-					end	
-					-- UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
-				end		
-
-				if user_os == "Win" and modal_popup_id == "remove_mapping_macro_assign_list" .. i and modal_popup == true then
-					local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
-					if user_input_remove_mapping == 6 then -- YES
-						unlink_confirmed = true
-					end			
-					ResetModalWorkaroundVariables()
-				end										
-
-				if unlink_confirmed == true then									
-					UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
-				end
-
-				-- Draw the text with the determined color
-				reaper.ImGui_SameLine(ctx)
-				reaper.ImGui_SetCursorPos(ctx, x, y)
-				reaper.ImGui_SetNextItemAllowOverlap(ctx)				
-				reaper.ImGui_TextColored(ctx, assignation_color, t_assignations[i].param_name)
-
-				reaper.ImGui_SameLine(ctx)
-				local assignation_color = white
-				local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, t_assignations[i].fx_name)
-				local x, y = reaper.ImGui_GetCursorPos( ctx )
-				reaper.ImGui_InvisibleButton(ctx, "hover_area_fx", text_size_x, text_size_y)
-
-				if reaper.ImGui_IsItemHovered(ctx) then
-					assignation_color = full_white
-				end
-
-				-- Open FX
-				if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Ctrl()) then
-					reaper.TrackFX_Show(track, t_assignations[i].fx_id, 3) -- In floating window					
-				elseif reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
-					reaper.TrackFX_Show(track, t_assignations[i].fx_id, 1) -- In FXchain									
-				end					
-
-				-- Draw the fx name
-				reaper.ImGui_SameLine(ctx)
-				reaper.ImGui_SetCursorPos(ctx, x, y)
-				reaper.ImGui_TextColored(ctx, assignation_color, t_assignations[i].fx_name)	
 			end
-
-			if reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_Escape()) then
-				reaper.ImGui_CloseCurrentPopup(ctx)
-			end			
-
-			reaper.ImGui_EndPopup(ctx)
 		end		
 
-		if reaper.ImGui_IsPopupOpen(ctx, 'macro_popup' .. str_index, 0) then			
-			_G["macroPopup" .. str_index] = 1
-		else
-			_G["macroPopup" .. str_index] = 0
-		end								
+		if user_os == "Win" and modal_popup_id == "macro_alias" and modal_popup == true then
+			reaper.TrackFX_SetParam(track, fx, macro_param_id, macro_val) -- To set as last touched param
+			Command(41145) -- FX: Set alias for last touched FX parameter
+		end				
+
+		if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Right()) then
+			if not _G["macroList" .. index] then _G["macroList" .. index] = 0 end
+			if not _G["macroPopup" .. index] then _G["macroPopup" .. index] = 0 end
+			-- Close all the other macro assign list before opening this one
+			for i=1, 6 do
+				if i ~= index then
+					_G["macroList" .. i] = 0
+					_G["macroPopup" .. i] = 0
+				end
+			end			
+			_G["macroList" .. index] = 1 - _G["macroList" .. index]
+			_G["macroPopup" .. index] = 1 - _G["macroPopup" .. index]
+		end
+		
+		-- reaper.ImGui_OpenPopupOnItemClick(ctx, 'macro_popup' .. str_index, reaper.ImGui_PopupFlags_MouseButtonRight())		
+
+		-- Macro assignations popup
+		-- if reaper.ImGui_BeginPopupContextItem(ctx, 'macro_popup' .. str_index) then
+		-- 	local popup_width, popup_height = reaper.ImGui_GetWindowSize(ctx)
+		-- 	local x, y = reaper.ImGui_GetCursorPos( ctx )
+		-- 	reaper.ImGui_SetCursorPos(ctx, (popup_width * 0.5) - (width * 0.5), y)
+		-- 	reaper.ImGui_PushFont(ctx, fonts.medium_bold)
+		-- 	if reaper.ImGui_Button(ctx, macro_name, width) then
+		-- 		if user_os == "Win" then
+		-- 			StartModalWorkaround("macro_alias")
+		-- 		else					
+		-- 			reaper.TrackFX_SetParam(track, fx, macro_param_id, macro_val) -- To set as last touched param
+		-- 			Command(41145) -- FX: Set alias for last touched FX parameter
+		-- 		end
+		-- 	end		
+
+		-- 	if user_os == "Win" and modal_popup_id == "macro_alias" and modal_popup == true then
+		-- 		reaper.TrackFX_SetParam(track, fx, macro_param_id, macro_val) -- To set as last touched param
+		-- 		Command(41145) -- FX: Set alias for last touched FX parameter
+		-- 	end	
+
+		-- 	reaper.ImGui_PopFont(ctx)
+		-- 	ToolTip("Click to rename Macro")
+
+		-- 	-- if proj_updated then
+		-- 		t_assignations = GetAssignations(track, fx, macro_param_id) -- Need to optimize this potentially intense function
+		-- 	-- end
+		-- 	for i=1, #t_assignations do
+
+		-- 		assignation_color = DarkerColor(t_color_palette[mod_container_table_id], 4)
+
+		-- 		local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, t_assignations[i].param_name)
+		-- 		local x, y = reaper.ImGui_GetCursorPos( ctx )
+		-- 		reaper.ImGui_InvisibleButton(ctx, "hover_area", text_size_x, text_size_y)
+		-- 		ToolTip("Alt-click: Delete assignation")
+
+		-- 		if reaper.ImGui_IsItemHovered(ctx) then
+		-- 			assignation_color = BrighterColor(t_color_palette[mod_container_table_id])
+		-- 		end
+
+		-- 		-- Set as last touched parameter
+		-- 		if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+		-- 			local current_val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+		-- 			reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, current_val) -- To set as last touched param
+		-- 		end	
+
+		-- 		-- Delete modulation
+		-- 		if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Alt()) then																				
+		-- 			local current_val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+		-- 			reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, current_val) -- To set as last touched param
+
+		-- 			local unlink_confirmed
+		-- 			if user_os == "Win" then
+		-- 				StartModalWorkaround("remove_mapping_macro_assign_list" .. i)
+		-- 			else	
+		-- 				local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
+		-- 				if user_input_remove_mapping == 6 then -- YES
+		-- 					unlink_confirmed = true
+		-- 				end	
+		-- 			end	
+		-- 			-- UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
+		-- 		end		
+
+		-- 		if user_os == "Win" and modal_popup_id == "remove_mapping_macro_assign_list" .. i and modal_popup == true then
+		-- 			local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
+		-- 			if user_input_remove_mapping == 6 then -- YES
+		-- 				unlink_confirmed = true
+		-- 			end			
+		-- 			ResetModalWorkaroundVariables()
+		-- 		end										
+
+		-- 		if unlink_confirmed == true then									
+		-- 			UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
+		-- 		end
+
+		-- 		-- Draw the text with the determined color
+		-- 		reaper.ImGui_SameLine(ctx)
+		-- 		reaper.ImGui_SetCursorPos(ctx, x, y)
+		-- 		reaper.ImGui_SetNextItemAllowOverlap(ctx)				
+		-- 		reaper.ImGui_TextColored(ctx, assignation_color, t_assignations[i].param_name)
+
+		-- 		reaper.ImGui_SameLine(ctx)
+		-- 		local assignation_color = white
+		-- 		local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, t_assignations[i].fx_name)
+		-- 		local x, y = reaper.ImGui_GetCursorPos( ctx )
+		-- 		reaper.ImGui_InvisibleButton(ctx, "hover_area_fx", text_size_x, text_size_y)
+
+		-- 		if reaper.ImGui_IsItemHovered(ctx) then
+		-- 			assignation_color = full_white
+		-- 		end
+
+		-- 		-- Open FX
+		-- 		if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Ctrl()) then
+		-- 			reaper.TrackFX_Show(track, t_assignations[i].fx_id, 3) -- In floating window					
+		-- 		elseif reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+		-- 			reaper.TrackFX_Show(track, t_assignations[i].fx_id, 1) -- In FXchain									
+		-- 		end					
+
+		-- 		-- Draw the fx name
+		-- 		reaper.ImGui_SameLine(ctx)
+		-- 		reaper.ImGui_SetCursorPos(ctx, x, y)
+		-- 		reaper.ImGui_TextColored(ctx, assignation_color, t_assignations[i].fx_name)	
+		-- 	end
+
+		-- 	if reaper.ImGui_IsKeyPressed(ctx, reaper.ImGui_Key_Escape()) then
+		-- 		reaper.ImGui_CloseCurrentPopup(ctx)
+		-- 	end			
+
+		-- 	reaper.ImGui_EndPopup(ctx)
+		-- end		
+
+		-- if reaper.ImGui_IsPopupOpen(ctx, 'macro_popup' .. str_index, 0) then			
+		-- 	_G["macroPopup" .. str_index] = 1
+		-- else
+		-- 	_G["macroPopup" .. str_index] = 0
+		-- end								
 
 		if t_last_param.param and (touched_fx + (t_last_param.param * 0.1)) ~= (fx + (macro_param_id * 0.1)) then -- Check if last touched param is not the macro itself
 			if param_is_linked_to_anything == 1 then
-				ToolTip("Left-click: Remap [" .. t_last_param.param_name .. "] to MACRO " .. index .. "\n\nRight-click: Show Assignations")	
+				ToolTip("Left-click: Remap [" .. t_last_param.param_name .. "] to MACRO " .. index .. "\n\nRight-click: Show Assignations\nShift+Click: Rename macro")	
 			else
-				ToolTip("Left-click: Map [" .. t_last_param.param_name .. "] to MACRO " .. index .. "\n\nRight-click: Show Assignations")
+				ToolTip("Left-click: Map [" .. t_last_param.param_name .. "] to MACRO " .. index .. "\n\nRight-click: Show Assignations\nShift+Click: Rename macro")
 			end	
 		else
-			ToolTip("Right-click: Show Assignations")
+			ToolTip("Right-click: Show Assignations\nShift+Click: Rename macro")
 		end			
 
 		reaper.ImGui_Dummy(ctx, 0, 0)
@@ -1822,7 +2040,7 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 			_G["macro" .. str_index] = macro_val
 			-- _G["rv_macro" .. str_index], _G["macro_baseline" .. str_index], _G["macro" .. str_index] = CustomSlider("##" .. macro_name, _G["macro_baseline" .. str_index], _G["macro" .. str_index], min, max, width - x - win_padding_x, 13, 50, true, 1, view_mod_range_slider, BrighterColor(UI_color, 1))
 			_G["rv_macro" .. str_index], _G["macro_baseline" .. str_index], _G["macro" .. str_index] = CustomSlider("##" .. macro_name, _G["macro_baseline" .. str_index], _G["macro" .. str_index], min, max, width - x - win_padding_x, 13, 50, true, 1, view_mod_range_slider, BrighterColor(t_color_palette[mod_container_table_id], 3))
-			if _G["rv_macro" .. str_index] == true then				
+			if _G["rv_macro" .. str_index] == true then		
 
 				-- Check if conditions are fullfilled to show Macro value
 				local show_macro_val
@@ -1838,7 +2056,8 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 					GetPMData(track, t_last_param.fx, t_last_param.param) -- Update data because macro values are displayed in the FX PARAMETER header
 				end						
 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. macro_param_id .. ".mod.baseline", _G["macro_baseline" .. str_index])								
-			end			
+			end				
+
 		else
 			_G["macro" .. str_index] = macro_val
 			-- _G["rv_macro" .. str_index], _G["macro" .. str_index] = CustomSlider("##" .. macro_name, _G["macro" .. str_index], 0, min, max, width - x - win_padding_x, 13, 50, false, 1, 0, BrighterColor(UI_color, 1))
@@ -1847,6 +2066,216 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 				reaper.TrackFX_SetParam(track, fx, macro_param_id, _G["macro" .. str_index])
 			end			
 		end
+
+		if _G["macroList" .. index] == 1 then	
+			local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
+			local popup_width, popup_height = reaper.ImGui_GetWindowSize(ctx)
+			local screen_x, screen_y = reaper.ImGui_GetCursorScreenPos(ctx)
+
+			reaper.ImGui_DrawList_AddLine(draw_list, screen_x - win_padding_x, screen_y + 4, screen_x + width - win_padding_x, screen_y + 4, mod_border_color, vertical_line_border_size)			
+
+			-- if proj_updated then
+				t_assignations = GetAssignations(track, fx, macro_param_id) -- Need to optimize this potentially intense function
+			-- end
+
+			overview_baseline = nil
+			overview_scale = nil			
+
+			if #t_assignations == 0 then
+				reaper.ImGui_Dummy(ctx, 0, 7)
+				reaper.ImGui_Text(ctx, "No Assignation")
+			else
+				for i=1, #t_assignations do
+
+					if i == 1 then reaper.ImGui_Dummy(ctx, 0, 6) end
+					-- assignation_color = DarkerColor(t_color_palette[mod_container_table_id], 4)
+					assignation_color = DarkerColor2(t_color_palette[mod_container_table_id], 0.1)
+
+					local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, t_assignations[i].param_name)
+					local x, y = reaper.ImGui_GetCursorPos( ctx )
+					reaper.ImGui_InvisibleButton(ctx, "hover_area", text_size_x, text_size_y)
+					ToolTip("Alt-click: Delete assignation")
+
+					if reaper.ImGui_IsItemHovered(ctx) then
+						-- assignation_color = BrighterColor(t_color_palette[mod_container_table_id])
+						assignation_color = BrighterColor2(t_color_palette[mod_container_table_id], 0.3)
+					end
+
+					-- Set as last touched parameter
+					if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+						local current_val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+						reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, current_val) -- To set as last touched param
+					end	
+
+					-- Delete modulation
+					local unlink_confirmed					
+					if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Alt()) then																				
+						local current_val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+						reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, current_val) -- To set as last touched param
+
+						if user_os == "Win" then
+							StartModalWorkaround("remove_mapping_macro_assign_list" .. i)
+						else	
+							local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
+							if user_input_remove_mapping == 6 then -- YES
+								unlink_confirmed = true
+							end	
+						end	
+						-- UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
+					end		
+
+					if user_os == "Win" and modal_popup_id == "remove_mapping_macro_assign_list" .. i and modal_popup == true then
+						local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
+						if user_input_remove_mapping == 6 then -- YES
+							unlink_confirmed = true
+						end			
+						ResetModalWorkaroundVariables()
+					end										
+
+					if unlink_confirmed == true then									
+						UnlinkParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)	
+					end
+
+					-- Draw the text with the determined color
+					reaper.ImGui_SameLine(ctx)
+					reaper.ImGui_SetCursorPos(ctx, x, y)
+					reaper.ImGui_SetNextItemAllowOverlap(ctx)				
+					reaper.ImGui_TextColored(ctx, assignation_color, t_assignations[i].param_name)
+
+					-- Draw FX name if this is a new FX
+					if i == 1 or t_assignations[i].fx_id ~= t_assignations[i-1].fx_id then
+						reaper.ImGui_SameLine(ctx)
+						local assignation_color = white
+						local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, t_assignations[i].fx_name)
+						local x, y = reaper.ImGui_GetCursorPos( ctx )
+						reaper.ImGui_InvisibleButton(ctx, "hover_area_fx", text_size_x, text_size_y)
+
+						if reaper.ImGui_IsItemHovered(ctx) then
+							assignation_color = full_white
+						end
+
+						-- Open FX
+						if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+							if reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Ctrl()) then
+								reaper.TrackFX_Show(track, t_assignations[i].fx_id, 3) -- In floating window					
+							else
+								reaper.TrackFX_Show(track, t_assignations[i].fx_id, 1) -- In FXchain	
+							end
+						end					
+
+						-- Draw the fx name
+						reaper.ImGui_SameLine(ctx)
+						reaper.ImGui_PushFont(ctx, fonts.small)
+						reaper.ImGui_SetCursorPos(ctx, x, y + 3)
+						local width_for_fxName = reaper.ImGui_GetContentRegionAvail(ctx)
+						local fx_name_clipped = ClipText(t_assignations[i].fx_name, width_for_fxName)
+						reaper.ImGui_TextColored(ctx, assignation_color, fx_name_clipped)
+						if fx_name_clipped ~= t_assignations[i].fx_name then ToolTip(t_assignations[i].fx_name) end
+						reaper.ImGui_PopFont(ctx)
+					end
+
+					-- Show baseline and mod amount sliders
+					reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 0)
+					reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrab(), t_color_palette[mod_container_table_id])
+					reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrabActive(), t_color_palette[mod_container_table_id])
+
+					local val, min, max = reaper.TrackFX_GetParamEx(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+					local _, offset = reaper.TrackFX_GetNamedConfigParm(track, t_assignations[i].fx_id, "param." .. t_assignations[i].param_id .. ".mod.baseline")
+					local offset_formatted
+
+					if max ~= 1 then -- If effect is a JSFX
+						-- last_touched_param_value = (last_touched_param_value / max) - min -- Useful for JSFX with parameter value range > 1
+						offset_formatted = offset
+						offset_formatted = string.format("%.2f", offset_formatted)
+					else
+						rv, offset_formatted = reaper.TrackFX_FormatParamValueNormalized(track, t_assignations[i].fx_id, t_assignations[i].param_id, offset, "")												
+						offset_formatted = ReplaceRareUnicode(offset_formatted)	
+					end
+
+					offset_formatted = offset_formatted:gsub("%%", "%%%%") -- Escape "%"					
+
+					-- Special case of plugins not supporting the Cockos VST extension (hard-coded)
+					if t_assignations[i].fx_name_raw:find("Valhalla DSP") then
+						local baseline_rounded = string.format("%.2f", offset)
+						offset_formatted = baseline_rounded
+					end
+
+
+					reaper.ImGui_SetNextItemWidth(ctx, popup_width * 0.5 - (win_padding_x * 2))
+					local rv_offset, offset = reaper.ImGui_SliderDouble(ctx, "##offset" .. i, offset, min, max, offset_formatted)
+					-- local rv_offset, offset = reaper.ImGui_SliderDouble(ctx, "##offset" .. i, offset, min, max)
+					if rv_offset then
+
+						-- active as last-touched FX param
+						local val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+						reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, val)
+
+						reaper.TrackFX_SetNamedConfigParm(track, t_assignations[i].fx_id, "param." .. t_assignations[i].param_id .. ".mod.baseline", offset)
+					end
+
+					-- show mod range
+					if reaper.ImGui_IsItemActive(ctx) then
+						overview_baseline = 1
+					end	
+
+					reaper.ImGui_SameLine(ctx)
+
+					local _, amount = reaper.TrackFX_GetNamedConfigParm(track, t_assignations[i].fx_id, "param." .. t_assignations[i].param_id .. ".plink.scale")
+					local amount_formatted = string.format('%.1f %%%%', amount * 100)
+
+					reaper.ImGui_SetNextItemWidth(ctx, popup_width * 0.5 - (win_padding_x * 2))
+					local rv_amount, amount = reaper.ImGui_SliderDouble(ctx, "##amount" .. i, amount, -1, 1, amount_formatted)
+					if rv_amount then
+
+						show_mod_value = true
+
+						-- active as last-touched FX param
+						local val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+						reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, val)
+
+						reaper.TrackFX_SetNamedConfigParm(track, t_assignations[i].fx_id, "param." .. t_assignations[i].param_id .. ".plink.scale", amount)
+					end	
+
+					-- show mod range
+					if reaper.ImGui_IsItemActive(ctx) then
+						overview_scale = 1
+					end						
+
+					-- Update data
+					if rv_offset or rv_amount then
+						GetLastTouchedFXParam(track)
+						GetPMData(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+					end					
+
+					reaper.ImGui_PopStyleVar(ctx, 1)
+					reaper.ImGui_PopStyleColor(ctx, 2)
+
+
+					-- reaper.ImGui_SameLine(ctx)
+					-- local assignation_color = white
+					-- local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, t_assignations[i].fx_name)
+					-- local x, y = reaper.ImGui_GetCursorPos( ctx )
+					-- reaper.ImGui_InvisibleButton(ctx, "hover_area_fx", text_size_x, text_size_y)
+
+					-- if reaper.ImGui_IsItemHovered(ctx) then
+					-- 	assignation_color = full_white
+					-- end
+
+					-- -- Open FX
+					-- if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Ctrl()) then
+					-- 	reaper.TrackFX_Show(track, t_assignations[i].fx_id, 3) -- In floating window					
+					-- elseif reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+					-- 	reaper.TrackFX_Show(track, t_assignations[i].fx_id, 1) -- In FXchain									
+					-- end					
+
+					-- -- Draw the fx name
+					-- reaper.ImGui_SameLine(ctx)
+					-- reaper.ImGui_SetCursorPos(ctx, x, y)
+					-- reaper.ImGui_TextColored(ctx, assignation_color, t_assignations[i].fx_name)	
+				end
+			end
+		end	
+
 		reaper.ImGui_EndChild(ctx)
 	end
 	reaper.ImGui_PopStyleColor(ctx, 4)
@@ -1855,7 +2284,7 @@ end
 
 function DrawMIDILearn(track, fx, param)
 	reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ChildRounding(), 5.0)
-	if t_pm_data.midi_learn then
+	if t_pm_data.midi_learn and t_pm_data.midi_learn ~= 0 then
 		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Border(), DarkerColor(track_color))
 		reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ChildBorderSize(), 2)
 	else
@@ -1871,7 +2300,7 @@ function DrawMIDILearn(track, fx, param)
 		local x, y = reaper.ImGui_GetCursorPos(ctx)
 
 		local midi_learn_active
-		if t_pm_data.midi_learn then
+		if t_pm_data.midi_learn and t_pm_data.midi_learn ~= 0 then
 			midi_learn_active = 1
 		else
 			midi_learn_active = 0
@@ -1880,12 +2309,13 @@ function DrawMIDILearn(track, fx, param)
 		-- rv_midi_active, midi_learn_active = ToggleButton(ctx, "MIDI Learn", midi_learn_active, width - (win_padding_x * 2), 20)		
 		reaper.ImGui_PushFont(ctx, fonts.medium_bold)
 		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_CheckMark(), track_color)
-		rv_midi_active, midi_learn_active = reaper.ImGui_Checkbox(ctx, "MIDI LEARN", midi_learn_active)				
+		rv_midi_active, midi_learn_active = reaper.ImGui_Checkbox(ctx, "MIDI LEARN", midi_learn_active)	
 		reaper.ImGui_PopStyleColor(ctx)
 		reaper.ImGui_PopFont(ctx)	
-		ToolTip("currently not working due to a Reaper bug")	
+		-- ToolTip("currently not working due to a Reaper bug")	
 
 		if rv_midi_active then
+			reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".mod.active", 1) -- Active PM in case it was removed in Overview
 			midi_learn_active = midi_learn_active and 1 or 0
 			-- reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.active", t_pm_data.midi_learn)
 			local current_val = reaper.TrackFX_GetParam(track, fx, param)
@@ -1938,6 +2368,7 @@ function DrawNativeLFO(track, fx, param)
 		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_CheckMark(), track_color)
 		local checkbox_lfo = t_pm_data.lfo_active
 		rv_lfo_active, checkbox_lfo = reaper.ImGui_Checkbox(ctx, "NATIVE LFO", checkbox_lfo)				
+		ToolTip("Enable/disable Native LFO")
 		reaper.ImGui_PopStyleColor(ctx)
 		reaper.ImGui_PopFont(ctx)
 
@@ -1957,6 +2388,20 @@ function DrawNativeLFO(track, fx, param)
 			reaper.ImGui_Dummy(ctx, 0, 10)
 
 			reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 0) -- Un-round the sliders
+			-- LFO strength
+			local text_lfo_strength = "Strength"
+			local text_lfo_strength_clipped = ClipText(text_lfo_strength, GetLabelMaxWidth())
+			rv_lfo_strength, t_lfo_params.lfo_strength = reaper.ImGui_SliderDouble(ctx, text_lfo_strength_clipped, t_lfo_params.lfo_strength, 0, 1, string.format("%.2f", t_lfo_params.lfo_strength * 100), reaper.ImGui_SliderFlags_NoInput())
+			if rv_lfo_strength then				
+				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.strength", t_lfo_params.lfo_strength)
+			end				
+			if text_lfo_strength_clipped ~= text_lfo_strength then ToolTip(text_lfo_strength, 1) end	
+			if reaper.ImGui_IsItemActive(ctx) then
+				lfo_strength_adjust = 1
+			else
+				lfo_strength_adjust = nil
+			end
+			
 			-- LFO shape
 			local shape_format
 			if t_lfo_params.lfo_shape < 1 then
@@ -1993,43 +2438,72 @@ function DrawNativeLFO(track, fx, param)
 				end	
 			else
 				-- Sloppy code
-				local beat = {"1/16", "1/8", "1/4", "1/2", "1/1", "2/1"}			
-				local current_item = 0
-				if t_lfo_params.lfo_speed == 0.25 then combo_preview_value = beat[1]
-				elseif t_lfo_params.lfo_speed > 0.25 and t_lfo_params.lfo_speed <= 0.5 then combo_preview_value = beat[2]
-				elseif t_lfo_params.lfo_speed > 0.5 and t_lfo_params.lfo_speed <= 1 then combo_preview_value = beat[3]
-				elseif t_lfo_params.lfo_speed > 1 and t_lfo_params.lfo_speed <= 2 then combo_preview_value = beat[4]
-				elseif t_lfo_params.lfo_speed > 2 and t_lfo_params.lfo_speed <= 4 then combo_preview_value = beat[5]
-				elseif t_lfo_params.lfo_speed > 4 and t_lfo_params.lfo_speed <= 8 then combo_preview_value = beat[6]					
-				end
+				-- local beat = {"1/16", "1/8", "1/4", "1/2", "1/1", "2/1"}			
+				-- local current_item = 0
+				-- if t_lfo_params.lfo_speed == 0.25 then combo_preview_value = beat[1]
+				-- elseif t_lfo_params.lfo_speed > 0.25 and t_lfo_params.lfo_speed <= 0.5 then combo_preview_value = beat[2]
+				-- elseif t_lfo_params.lfo_speed > 0.5 and t_lfo_params.lfo_speed <= 1 then combo_preview_value = beat[3]
+				-- elseif t_lfo_params.lfo_speed > 1 and t_lfo_params.lfo_speed <= 2 then combo_preview_value = beat[4]
+				-- elseif t_lfo_params.lfo_speed > 2 and t_lfo_params.lfo_speed <= 4 then combo_preview_value = beat[5]
+				-- elseif t_lfo_params.lfo_speed > 4 and t_lfo_params.lfo_speed <= 8 then combo_preview_value = beat[6]					
+				-- end
 
-				if reaper.ImGui_BeginCombo(ctx, text_lfo_speed_clipped, combo_preview_value) then
-					for i,v in ipairs(beat) do
-						local is_selected = current_item == i
-						if reaper.ImGui_Selectable(ctx, beat[i], is_selected) then
-							current_item = i
-							if current_item == 1 then
-								reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 0.25)
-							elseif current_item == 2 then
-								reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 0.5)
-							elseif current_item == 3 then
-								reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 1)
-							elseif current_item == 4 then
-								reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 2)
-							elseif current_item == 5 then
-								reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 4)
-							elseif current_item == 6 then
-								reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 8)																												
-							end
-						end
+				-- if reaper.ImGui_BeginCombo(ctx, text_lfo_speed_clipped, combo_preview_value) then
+				-- 	for i,v in ipairs(beat) do
+				-- 		local is_selected = current_item == i
+				-- 		if reaper.ImGui_Selectable(ctx, beat[i], is_selected) then
+				-- 			current_item = i
+				-- 			if current_item == 1 then
+				-- 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 0.25)
+				-- 			elseif current_item == 2 then
+				-- 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 0.5)
+				-- 			elseif current_item == 3 then
+				-- 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 1)
+				-- 			elseif current_item == 4 then
+				-- 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 2)
+				-- 			elseif current_item == 5 then
+				-- 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 4)
+				-- 			elseif current_item == 6 then
+				-- 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 8)																												
+				-- 			end
+				-- 		end
 
-						-- Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-						if is_selected then
-							reaper.ImGui_SetItemDefaultFocus(ctx)
-						end
-					end
-					reaper.ImGui_EndCombo(ctx)
+				-- 		-- Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+				-- 		if is_selected then
+				-- 			reaper.ImGui_SetItemDefaultFocus(ctx)
+				-- 		end
+				-- 	end
+				-- 	reaper.ImGui_EndCombo(ctx)
+				-- end	
+		
+				local beat = '1/16\0' .. '1/8\0' .. '1/4\0' .. '1/2\0' .. '1/1\0' .. '2/1\0'
+				local current_beat = 0
+				if t_lfo_params.lfo_speed == 0.25 then current_beat = 0
+				elseif t_lfo_params.lfo_speed > 0.25 and t_lfo_params.lfo_speed <= 0.5 then current_beat = 1
+				elseif t_lfo_params.lfo_speed > 0.5 and t_lfo_params.lfo_speed <= 1 then current_beat = 2
+				elseif t_lfo_params.lfo_speed > 1 and t_lfo_params.lfo_speed <= 2 then current_beat = 3
+				elseif t_lfo_params.lfo_speed > 2 and t_lfo_params.lfo_speed <= 4 then current_beat = 4
+				elseif t_lfo_params.lfo_speed > 4 and t_lfo_params.lfo_speed <= 8 then current_beat = 5
 				end			
+			
+				rv_beat, current_beat = reaper.ImGui_Combo(ctx, text_lfo_speed_clipped, current_beat, beat)
+
+				if rv_beat then
+					if current_beat == 0 then
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 0.25)
+					elseif current_beat == 1 then
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 0.5)
+					elseif current_beat == 2 then
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 1)
+					elseif current_beat == 3 then
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 2)
+					elseif current_beat == 4 then
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 4)
+					elseif current_beat == 5 then
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 8)																												
+					end
+				end				
+
 			end
 			if text_lfo_speed_clipped ~= text_lfo_speed then ToolTip(text_lfo_speed, 1) end	
 
@@ -2042,19 +2516,6 @@ function DrawNativeLFO(track, fx, param)
 			end				
 			if text_lfo_phase_clipped ~= text_lfo_phase then ToolTip(text_lfo_phase, 1) end	
 
-			-- LFO strength
-			local text_lfo_strength = "Strength"
-			local text_lfo_strength_clipped = ClipText(text_lfo_strength, GetLabelMaxWidth())
-			rv_lfo_strength, t_lfo_params.lfo_strength = reaper.ImGui_SliderDouble(ctx, text_lfo_strength_clipped, t_lfo_params.lfo_strength, 0, 1, string.format("%.2f", t_lfo_params.lfo_strength * 100), reaper.ImGui_SliderFlags_NoInput())
-			if rv_lfo_strength then				
-				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.strength", t_lfo_params.lfo_strength)
-			end				
-			if text_lfo_strength_clipped ~= text_lfo_strength then ToolTip(text_lfo_strength, 1) end	
-			if reaper.ImGui_IsItemActive(ctx) then
-				lfo_strength_adjust = 1
-			else
-				lfo_strength_adjust = nil
-			end
 			reaper.ImGui_PopStyleVar(ctx)
 
 			-- LFO direction
@@ -2148,6 +2609,7 @@ function DrawNativeACS(track, fx, param)
 		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_CheckMark(), track_color)
 		local checkbox_acs = t_pm_data.acs_active
 		rv_acs_active, checkbox_acs = reaper.ImGui_Checkbox(ctx, "NATIVE ACS", checkbox_acs)				
+		ToolTip("Enable/disable Native Audio Follower")
 		reaper.ImGui_PopStyleColor(ctx)
 		reaper.ImGui_PopFont(ctx)		
 
@@ -2259,51 +2721,95 @@ function DrawNativeACS(track, fx, param)
 			-- reaper.ImGui_Text(ctx, text_acs_dir)	
 
 			-- Channels
+			reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 0) -- Un-round the sliders
 			local text_acs_chan = "Channels"
 			local text_acs_chan_clipped = ClipText(text_acs_chan, GetLabelMaxWidth())		
 
 			-- Sloppy code
-			local chan = {"1/2", "3/4", "5/6", "7/8"}			
-			local current_item = 0
-			if t_acs_params.acs_chan >= 0 and t_acs_params.acs_chan < 2 then combo_preview_value = chan[1]				
-			elseif t_acs_params.acs_chan >= 2 and t_acs_params.acs_chan < 4 then combo_preview_value = chan[2]
-			elseif t_acs_params.acs_chan >= 4 and t_acs_params.acs_chan < 6 then combo_preview_value = chan[3]
-			elseif t_acs_params.acs_chan >= 6 and t_acs_params.acs_chan < 8 then combo_preview_value = chan[4]
-			end
+			-- local chan = {"1/2", "3/4", "5/6", "7/8"}			
+			-- local current_item = 0
+			-- if t_acs_params.acs_chan >= 0 and t_acs_params.acs_chan < 2 then combo_preview_value = chan[1]				
+			-- elseif t_acs_params.acs_chan >= 2 and t_acs_params.acs_chan < 4 then combo_preview_value = chan[2]
+			-- elseif t_acs_params.acs_chan >= 4 and t_acs_params.acs_chan < 6 then combo_preview_value = chan[3]
+			-- elseif t_acs_params.acs_chan >= 6 and t_acs_params.acs_chan < 8 then combo_preview_value = chan[4]
+			-- end
 
+			-- local track_ch = (reaper.GetMediaTrackInfo_Value(track, "I_NCHAN") * 0.5)
+			-- -- local actual_chan -- after track channel evaluation
+			-- for i=1, #chan do
+			-- 	if i > track_ch then
+			-- 		chan[i] = nil
+			-- 	end
+			-- end
+
+			-- if reaper.ImGui_BeginCombo(ctx, text_acs_chan_clipped, combo_preview_value) then
+			-- 	for i,v in ipairs(chan) do
+			-- 		local is_selected = current_item == i
+			-- 		if reaper.ImGui_Selectable(ctx, chan[i], is_selected) then
+			-- 			current_item = i
+			-- 			if current_item == 1 then
+			-- 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.chan", 0)						
+			-- 			elseif current_item == 2 then
+			-- 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.chan", 2)
+			-- 			elseif current_item == 3 then
+			-- 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.chan", 4)
+			-- 			elseif current_item == 4 then
+			-- 				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.chan", 6)																												
+			-- 			end
+			-- 			reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.stereo", 1)
+			-- 		end
+
+			-- 		-- Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+			-- 		if is_selected then
+			-- 			reaper.ImGui_SetItemDefaultFocus(ctx)
+			-- 		end
+			-- 	end
+			-- 	reaper.ImGui_EndCombo(ctx)
+			-- end	
+
+			local t_chan = {"1/2", "3/4", "5/6", "7/8"}	
+			
 			local track_ch = (reaper.GetMediaTrackInfo_Value(track, "I_NCHAN") * 0.5)
 			-- local actual_chan -- after track channel evaluation
-			for i=1, #chan do
+			for i=1, #t_chan do
 				if i > track_ch then
-					chan[i] = nil
+					t_chan[i] = nil
 				end
+			end	
+			
+			-- chan = table.concat(chan, "\0")	
+			chan = ""
+			for i=1, #t_chan do
+				chan = chan .. t_chan[i] .. '\0'
+			end		
+
+			-- local chan = '1/2\0' .. '3/4\0' .. '5/6\0' .. '7/8\0'
+
+			local current_item = 0
+			if t_acs_params.acs_chan >= 0 and t_acs_params.acs_chan < 2 then current_item = 0
+			elseif t_acs_params.acs_chan >= 2 and t_acs_params.acs_chan < 4 then current_item = 1
+			elseif t_acs_params.acs_chan >= 4 and t_acs_params.acs_chan < 6 then current_item = 2
+			elseif t_acs_params.acs_chan >= 6 and t_acs_params.acs_chan < 8 then current_item = 3
 			end
 
-			if reaper.ImGui_BeginCombo(ctx, text_acs_chan_clipped, combo_preview_value) then
-				for i,v in ipairs(chan) do
-					local is_selected = current_item == i
-					if reaper.ImGui_Selectable(ctx, chan[i], is_selected) then
-						current_item = i
-						if current_item == 1 then
-							reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.chan", 0)						
-						elseif current_item == 2 then
-							reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.chan", 2)
-						elseif current_item == 3 then
-							reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.chan", 4)
-						elseif current_item == 4 then
-							reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.chan", 6)																												
-						end
-						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.stereo", 1)
-					end
+			rv_chan, current_item = reaper.ImGui_Combo(ctx, text_acs_chan_clipped, current_item, chan)
 
-					-- Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-					if is_selected then
-						reaper.ImGui_SetItemDefaultFocus(ctx)
-					end
+			if rv_chan then
+				-- reaper.ImGui_SetItemDefaultFocus(ctx)
+				if current_item == 0 then
+					reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.chan", 0)						
+				elseif current_item == 1 then
+					reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.chan", 2)
+				elseif current_item == 2 then
+					reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.chan", 4)
+				elseif current_item == 3 then
+					reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.chan", 6)																												
 				end
-				reaper.ImGui_EndCombo(ctx)
-			end	
+				reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.stereo", 1)
+			end								
+
 			if text_acs_chan_clipped ~= text_acs_chan then ToolTip(text_acs_chan, 1) end				
+			reaper.ImGui_PopStyleVar(ctx, 1)
 		end
 		reaper.ImGui_PopStyleColor(ctx, 2)
 		reaper.ImGui_EndChild(ctx)
@@ -2454,7 +2960,7 @@ function DrawIcon(width, height, color, track, fx, param, state, icon)
 		ToolTip("Enable/disable Native Audio Follower")
 	elseif icon == 3 then
 		Midi(draw_list, x, y, 13, height, icon_color, 2)
-		ToolTip("MIDI learn, currently not working on MacOS due to a Reaper bug")
+		ToolTip("MIDI learn")
 	end	
 
 	-- On button click
@@ -2466,7 +2972,8 @@ function DrawIcon(width, height, color, track, fx, param, state, icon)
 			ToggleNativeLFO(track, fx, param, state)
 		elseif icon == 2 then
 			ToggleNativeACS(track, fx, param, state)
-		elseif icon == 3 then				
+		elseif icon == 3 then	
+			reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".mod.active", 1)
 			-- Command(41144) -- FX: Set MIDI learn for last touched FX parameter
 			if user_os == "Win" then
 				StartModalWorkaround("icon_midiLearn")
@@ -2675,7 +3182,7 @@ function CustomButton(ctx, index, button_nb, width, height, track, fx, param)
 	if index == 2 then ToolTip("Enable modulation mapping for macros (touch macro sliders)") end
 	if index == 3 then ToolTip("Add another Flashmob instance") end
 	if index == 4 then ToolTip("Help") end
-	if index == 5 then ToolTip("Settings") end
+	if index == 5 then ToolTip("Overview") end
 
 	if reaper.ImGui_IsItemHovered(ctx) then
 		hovered = true
@@ -2820,9 +3327,66 @@ function CustomButton(ctx, index, button_nb, width, height, track, fx, param)
 	reaper.ImGui_SetCursorPos(ctx, after_x, after_y)
 end
 
-function FlashmobInstanceSelector(track)
+function OverviewButton(ctx, width, height, track)
+	local hovered, clicked
+	local before_x, before_y = reaper.ImGui_GetCursorPos(ctx)
+	local overview_toggle
+
+	if full == 1 then
+		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Button(), track_color)
+	end
+
+	reaper.ImGui_Button(ctx, "##Full", width, height)
+
+	-- if (index == 1 or index == 2) and rv_flashmob == false then
+	-- 	reaper.ImGui_EndDisabled(ctx)
+	-- end
+
+	ToolTip("Show all the modulations on this track")
+
+	if reaper.ImGui_IsItemHovered(ctx) then
+		hovered = true
+		if reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+			clicked = true
+			overview_toggle = true
+		end
+	end
+
+	reaper.ImGui_SameLine(ctx)			
+	local after_x, after_y = reaper.ImGui_GetCursorPos(ctx)		
+
+	if full == 1 then
+		reaper.ImGui_PopStyleColor(ctx, 1)
+	end
+
+	-- Change option after the button color push/pop
+	if overview_toggle then
+		full = 1 - full
+		reaper.SetProjExtState(0, "vf_flashmob", "overview", full)
+	end
+
+	-- Display icon
+	reaper.ImGui_SetCursorPos(ctx, before_x + (width * 0.5) - 8, before_y + 2)   
+			
+	if hovered then
+		reaper.ImGui_Image(ctx, img_overview_hover, reaper.ImGui_Image_GetSize(img_overview_hover))   
+	elseif full == 1 then
+		reaper.ImGui_Image(ctx, img_overview_on, reaper.ImGui_Image_GetSize(img_overview_on))   
+	else
+		reaper.ImGui_Image(ctx, img_overview_off, reaper.ImGui_Image_GetSize(img_overview_off))   
+	end
+
+	reaper.ImGui_SetCursorPos(ctx, after_x, after_y)
+end
+
+function FlashmobInstanceSelector(track, title)
 	-- Multiple Flashmob instances selector
 	if instance_nb > 1 then 
+		-- if title == 1 then
+		-- 	reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_SeparatorTextAlign(), 0.5, 0.5)
+		-- 	reaper.ImGui_SeparatorText(ctx, "Instance Selector")
+		-- 	reaper.ImGui_PopStyleVar(ctx, 1)
+		-- end
 		reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 0)
 
 		-- Left arrow
@@ -2834,7 +3398,13 @@ function FlashmobInstanceSelector(track)
 			local mod_container_guid = reaper.TrackFX_GetFXGUID(track, mod_container_id)
 			reaper.GetSetMediaTrackInfo_String(track, "P_EXT:vf_flashmob_last_instance", mod_container_id .. "," .. mod_container_table_id .. "," .. mod_container_guid, 1)
 			reset_plot_lines = true
+			-- Close mod assign lists
+			for i=1, 6 do
+				_G["modList" .. i] = 0
+				_G["modPopup" .. i] = 0
+			end	
 		end
+		ToolTip("Select previous Flashmob instance")
 		local arrow_w = reaper.ImGui_GetItemRectSize(ctx)
 		reaper.ImGui_SameLine(ctx)					
 
@@ -2842,31 +3412,35 @@ function FlashmobInstanceSelector(track)
 		local total_fx = reaper.TrackFX_GetCount(track)
 		local rv_flashmob_name, mod_container_name = reaper.TrackFX_GetFXName(track, mod_container_id)
 		if rv_flashmob_name then
-			mod_container_name = mod_container_name:gsub('——', '-') -- Workaround to replace unsupported "2 long dashes" characters with one small dash (used by Flashmob)							
-			mod_container_name = mod_container_name:gsub('—', '-') -- Workaround to replace unsupported "1 long dashes" characters with one small dash (used by Flashmob)							
+			-- mod_container_name = mod_container_name:gsub('——', '-') -- Workaround to replace unsupported "2 long dashes" characters with one small dash (used by Flashmob)							
+			-- mod_container_name = mod_container_name:gsub('—', '-') -- Workaround to replace unsupported "1 long dashes" characters with one small dash (used by Flashmob)							
+			mod_container_name = mod_container_name:gsub('——', '') -- Workaround to remove unsupported "2 long dashes" characters
+			mod_container_name = mod_container_name:gsub('—', '') -- Workaround to remove unsupported "1 long dashes" characters
+			mod_container_name = mod_container_name:gsub('^ ', '') -- Remove leading space
+			mod_container_name = mod_container_name:gsub(' $', '') -- Remove trailing space
 			local avail_x, avail_y = reaper.ImGui_GetContentRegionAvail(ctx) -- to get the available space (including the potential scrollbar)
-			local mod_container_name_clipped = ClipText(mod_container_name, avail_x - arrow_w - 6)
+			local mod_container_name_clipped = ClipText(mod_container_name, avail_x - (arrow_w * 2))
 			local mod_container_name_w, mod_container_name_h = reaper.ImGui_CalcTextSize(ctx, mod_container_name_clipped)				
 
 			local x, y = reaper.ImGui_GetCursorPos(ctx)
 			local flashmob_name_pos
 			if mod_container_name_clipped ~= mod_container_name then -- Center Flashmob name if space is available
-				flashmob_name_pos = x + (avail_x - (arrow_w + 2) - mod_container_name_w - win_padding_x)
+				flashmob_name_pos = x + (avail_x - (arrow_w * 2) - mod_container_name_w - win_padding_x)
 			else
-				flashmob_name_pos = x + (avail_x - (arrow_w + 2) - mod_container_name_w - win_padding_x) * 0.5
+				flashmob_name_pos = x + (avail_x - (arrow_w * 2) - mod_container_name_w - win_padding_x) * 0.5
 			end
 			-- if flashmob_name_pos <= arrow_w + win_padding_x + 4 then flashmob_name_pos = arrow_w + win_padding_x + 4 end
 
-			reaper.ImGui_SetCursorPos(ctx, flashmob_name_pos, y)
+			reaper.ImGui_SetCursorPos(ctx, flashmob_name_pos, y + 3)
 			local flashmob_instance_color
-			reaper.ImGui_InvisibleButton(ctx, "flashmob_name", mod_container_name_w, mod_container_name_h)
+			reaper.ImGui_InvisibleButton(ctx, "flashmob_name", mod_container_name_w + 20, mod_container_name_h)
 			if reaper.ImGui_IsItemHovered(ctx) then									
 				flashmob_instance_color = BrighterColor2(t_color_palette[mod_container_table_id], 0.2)
 				if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
 					if user_os == "Win" then
 						StartModalWorkaround("flashmob_inst_alias")
 					else						
-						local retval, retvals_csv = reaper.GetUserInputs("Rename Flashmob Instance", 1, "New Name", mod_container_name)
+						local retval, retvals_csv = reaper.GetUserInputs("Rename Flashmob Instance", 1, "New Name, extrawidth=70", mod_container_name)
 						if retval then
 							local new_name = retvals_csv:match("([^,]+)")
 							if new_name ~= "" then
@@ -2890,9 +3464,9 @@ function FlashmobInstanceSelector(track)
 				ResetModalWorkaroundVariables()
 			end				
 
-			reaper.ImGui_SetCursorPos(ctx, flashmob_name_pos, y)
+			reaper.ImGui_SetCursorPos(ctx, flashmob_name_pos, y + 3)
 			reaper.ImGui_PushFont(ctx, fonts.medium_bold)
-			reaper.ImGui_TextColored(ctx, flashmob_instance_color, mod_container_name_clipped)
+			reaper.ImGui_TextColored(ctx, flashmob_instance_color, mod_container_table_id .. " - " .. mod_container_name_clipped)
 			reaper.ImGui_PopFont(ctx)
 
 			-- local mod_container_name_num = "(" .. mod_container_table_id .. "/" .. #t_flashmob_id .. ") " ..  mod_container_name -- Add the current flashmob instance index							
@@ -2905,7 +3479,7 @@ function FlashmobInstanceSelector(track)
 		-- Right arrow
 		local avail_x, avail_y = reaper.ImGui_GetContentRegionAvail(ctx)
 		local x, y = reaper.ImGui_GetCursorPos(ctx)
-		reaper.ImGui_SetCursorPos(ctx, x + avail_x - arrow_w, y)
+		reaper.ImGui_SetCursorPos(ctx, x + avail_x - arrow_w, y - 3)
 		if reaper.ImGui_ArrowButton(ctx, '##right', reaper.ImGui_Dir_Right()) then
 			mod_container_table_id = mod_container_table_id + 1
 			if mod_container_table_id > #t_flashmob_id then mod_container_table_id = 1 end
@@ -2913,8 +3487,14 @@ function FlashmobInstanceSelector(track)
 			mod_container_id = t_flashmob_id[mod_container_table_id]
 			local mod_container_guid = reaper.TrackFX_GetFXGUID(track, mod_container_id)
 			reaper.GetSetMediaTrackInfo_String(track, "P_EXT:vf_flashmob_last_instance", mod_container_id .. "," .. mod_container_table_id .. "," .. mod_container_guid, 1)
-			reset_plot_lines = true					
+			reset_plot_lines = true	
+			-- Close mod assign lists
+			for i=1, 6 do
+				_G["modList" .. i] = 0
+				_G["modPopup" .. i] = 0
+			end								
 		end	
+		ToolTip("Select next Flashmob instance")
 		reaper.ImGui_PopStyleVar(ctx, 1)
 	end
 
@@ -2975,7 +3555,7 @@ function Init()
 			error('ReaImGui is not installed or too old.')
 		end
 		package.path = reaper.ImGui_GetBuiltinPath() .. '/?.lua'
-		return require 'imgui' '0.9.2'
+		return require 'imgui' '0.9.3.3'
 	end)
 	if not ok then
 		reaper.MB("Please right-click and install 'ReaImGui: ReaScript binding for Dear ImGui'.\n\nThen restart REAPER and run the script again.\n", "ReaImGui API is not installed or too old", 0)
@@ -3023,11 +3603,14 @@ function Init()
 	rv_macro1, rv_macro2, rv_macro3, rv_macro4, rv_macro5, rv_macro6, rv_macro7, rv_macro8 = nil
 	macro1, macro2, macro3, macro4, macro5, macro6, macro7, macro8 = nil
 	macro_baseline1, macro_baseline2, macro_baseline3, macro_baseline4, macro_baseline5, macro_baseline6, macro_baseline7, macro_baseline8 = nil
-	modPopup1, modPopup2, modPopup3, modPopup4, modPopup5, modPopup6 = nil
+	-- modPopup1, modPopup2, modPopup3, modPopup4, modPopup5, modPopup6 = nil
 	macroPopup1, macroPopup2, macroPopup3, macroPopup4, macroPopup5, macroPopup6, macroPopup7, macroPopup8 = nil
+	-- child_height1, child_height2, child_height3, child_height4, child_height5, child_height6 = 76
+	-- test_1, test_2, test_3, test_4, test_5, test_6 = 0
 	UI_color = -1499027713 -- Grey
 	white = reaper.ImGui_ColorConvertDouble4ToU32(0.8, 0.8, 0.8, 1)
 	full_white = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 1)	
+	grey = reaper.ImGui_ColorConvertDouble4ToU32(0.2, 0.2, 0.2, 0.8)	
 	opened_tab = 1
 	last_opened_tab = nil
 	last_header_param = nil
@@ -3081,7 +3664,13 @@ function Init()
 	img_settings_hover = reaper.ImGui_CreateImage(script_path .. "Icons/" .. "Settings_hover.png")
 	reaper.ImGui_Attach(ctx, img_settings_hover)
 	img_settings_on = reaper.ImGui_CreateImage(script_path .. "Icons/" .. "Settings_on.png")
-	reaper.ImGui_Attach(ctx, img_settings_on)					
+	reaper.ImGui_Attach(ctx, img_settings_on)
+	img_overview_off = reaper.ImGui_CreateImage(script_path .. "Icons/" .. "Overview_off.png")
+	reaper.ImGui_Attach(ctx, img_overview_off)
+	img_overview_hover = reaper.ImGui_CreateImage(script_path .. "Icons/" .. "Overview_hover.png")
+	reaper.ImGui_Attach(ctx, img_overview_hover)
+	img_overview_on = reaper.ImGui_CreateImage(script_path .. "Icons/" .. "Overview_on.png")
+	reaper.ImGui_Attach(ctx, img_overview_on)						
 
 	reload_settings = true
 
@@ -3100,6 +3689,16 @@ function Init()
 		header_state_param = 1
 		header_state_source = 1		
 	end
+
+	-- Restore overview state
+	local _, saved_overview = reaper.GetProjExtState(0, "vf_flashmob", "overview")	
+	if saved_overview ~= "" then
+		full = tonumber(saved_overview)
+	else
+		full = 0
+	end
+
+
 
 	-- Global settings
 	setting_track_control = reaper.GetExtState("vf_flashmob", "track_control")
@@ -3172,6 +3771,10 @@ function Frame()
 			track_color = GetTrackColor(track)
 			if track ~= last_track then
 				track_sel_changed = true
+				for i=1, 6 do
+					_G["modList" .. i] = 0
+					_G["modPopup" .. i] = 0
+				end									
 			end
 			last_track = track
 		end  
@@ -3438,7 +4041,7 @@ function Frame()
 				reaper.ImGui_Dummy(ctx, 0, 0)
 				reaper.ImGui_PushFont(ctx, fonts.medium_bold)	
 				reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), SeparatorColor())					
-				reaper.ImGui_SeparatorText(ctx, "Global Settings")
+				reaper.ImGui_SeparatorText(ctx, "Global Overview")
 				reaper.ImGui_PopStyleColor(ctx, 1)
 				reaper.ImGui_PopFont(ctx)
 				reaper.ImGui_Dummy(ctx, 0, 0)
@@ -3464,11 +4067,11 @@ function Frame()
 					reaper.SetExtState("vf_flashmob", "track_control", setting_track_control, 1)					
 				end					
 				ToolTip("If enabled, FX parameters mapped to SNAPHEAP or NATIVE modulations \nare visible as Reaper Track Control (TCP and MCP)", 1)
-				reaper.ImGui_Dummy(ctx, 0, 4)
+				reaper.ImGui_Dummy(ctx, 0, 8)
 
 				reaper.ImGui_PushFont(ctx, fonts.medium_bold)	
 				reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), SeparatorColor())					
-				reaper.ImGui_SeparatorText(ctx, "Instance Settings")
+				reaper.ImGui_SeparatorText(ctx, "Instance Overview")
 				reaper.ImGui_PopStyleColor(ctx, 1)
 				reaper.ImGui_PopFont(ctx)
 				reaper.ImGui_Dummy(ctx, 0, 0)
@@ -3479,6 +4082,7 @@ function Frame()
 
 				-- Multiple Flashmob instances selector
 				FlashmobInstanceSelector(track)
+				reaper.ImGui_Dummy(ctx, 0, 0)
 
 				local sidechain_text = "Follower Sidechain"
 				local sidechain_text_clipped = ClipText(sidechain_text, width - 22)
@@ -3496,7 +4100,7 @@ function Frame()
 				if not rv_flashmob then
 					reaper.ImGui_EndDisabled(ctx)
 				end
-				reaper.ImGui_Dummy(ctx, 0, 4)
+				reaper.ImGui_Dummy(ctx, 0, 8)
 
 				reaper.ImGui_PushFont(ctx, fonts.medium_bold)
 				reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), SeparatorColor())						
@@ -3611,21 +4215,29 @@ function Frame()
 							reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ItemSpacing(), 4, 4)						
 
 							-- Native LFO icon
-							if (param_name_hovering or (t_pm_data.lfo_active and t_pm_data.lfo_active == 1)) and (t_pm_data.mod_active == nil or t_pm_data.mod_active == 1) then 					
+							-- if (param_name_hovering or (t_pm_data.lfo_active and t_pm_data.lfo_active == 1)) and (t_pm_data.mod_active == nil or t_pm_data.mod_active == 1) then 					
+							if (param_name_hovering or (t_pm_data.lfo_active and t_pm_data.lfo_active == 1)) then 					
 								DrawIcon(15, 12, track_color, track, t_last_param.fx, t_last_param.param, t_pm_data.lfo_active, 1) -- LFO
 								reaper.ImGui_SameLine(ctx)						
 							end
 
 							-- Native ACS icon
-							if (param_name_hovering or t_pm_data.acs_active and t_pm_data.acs_active == 1) and (t_pm_data.mod_active == nil or t_pm_data.mod_active == 1) then
+							-- if (param_name_hovering or t_pm_data.acs_active and t_pm_data.acs_active == 1) and (t_pm_data.mod_active == nil or t_pm_data.mod_active == 1) then
+							if (param_name_hovering or t_pm_data.acs_active and t_pm_data.acs_active == 1) then
 								DrawIcon(15, 12, track_color, track, t_last_param.fx, t_last_param.param, t_pm_data.acs_active, 2) -- ACS
 								reaper.ImGui_SameLine(ctx)
 							end	
 							reaper.ImGui_PopStyleVar(ctx, 1)							
 
 							-- MIDI Learn
-							local midi_learn_state = t_pm_data.midi_learn and 1 or 0
-							if (param_name_hovering or t_pm_data.midi_learn) and (t_pm_data.mod_active == nil or t_pm_data.mod_active == 1) then
+							local midi_learn_state
+							if t_pm_data.midi_learn and t_pm_data.midi_learn ~= 0 then
+								midi_learn_state = t_pm_data.midi_learn and 1 or 0
+							else
+								midi_learn_state = 0
+							end
+							-- if (param_name_hovering or t_pm_data.midi_learn) and (t_pm_data.mod_active == nil or t_pm_data.mod_active == 1) then
+							if param_name_hovering or (t_pm_data.midi_learn and t_pm_data.midi_learn ~= 0) then
 								DrawIcon(15, 12, track_color, track, t_last_param.fx, t_last_param.param, midi_learn_state, 3) -- MIDI Learn
 								reaper.ImGui_SameLine(ctx)
 								-- Hack to fix empty offset
@@ -3788,7 +4400,7 @@ function Frame()
 							-- SLIDERS
 
 							-- Calculate slider mod range 
-							if rv_link_scale or rv_baseline or lfo_strength_adjust or acs_strength_adjust then -- If sliders are adjusted, freeze the mod range to its max for a better visualization
+							if rv_link_scale or rv_baseline or lfo_strength_adjust or acs_strength_adjust or overview_scale or overview_baseline then -- If sliders are adjusted, freeze the mod range to its max for a better visualization
 								mod_range_slider = t_pm_data.baseline + (scale_dynamic * (max - min)) -- multiply scale by max is important for JSFX with max > 1
 							else
 								mod_range_slider = last_touched_param_value_raw
@@ -3865,21 +4477,22 @@ function Frame()
 									reaper.ImGui_BeginGroup(ctx)
 									reaper.ImGui_TextColored(ctx, mod_amount_text_color, amount_pre_text)
 
-									-- Display mod number in a circle
+									-- Display mod number in a circle or a square
 									reaper.ImGui_SameLine(ctx)	
 									local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
 									local center_x, center_y = reaper.ImGui_GetCursorScreenPos(ctx)
 
-									if t_pm_data.link_source_param > 7 then
+									if t_pm_data.link_source_param > 7 then										
 										reaper.ImGui_DrawList_AddCircle(draw_list, center_x + 4, center_y + 6, 8, t_color_palette[mod_index], num_segmentsIn, thicknessIn)
 									else
-										reaper.ImGui_DrawList_AddCircle(draw_list, center_x + 4, center_y + 6, 8, UI_color, num_segmentsIn, thicknessIn)
+										reaper.ImGui_DrawList_AddRect(draw_list, center_x - 4, center_y - 2, center_x + 12, center_y + 14, t_color_palette[mod_container_table_id], roundingIn, flagsIn, thicknessIn)
+										-- reaper.ImGui_DrawList_AddCircle(draw_list, center_x + 4, center_y + 6, 8, UI_color, num_segmentsIn, thicknessIn)
 									end
 
 									if t_pm_data.link_source_param > 7 then
 										reaper.ImGui_TextColored(ctx, t_color_palette[mod_index], mod_index)
 									else
-										reaper.ImGui_TextColored(ctx, UI_color, mod_index)
+										reaper.ImGui_TextColored(ctx, t_color_palette[mod_container_table_id], mod_index)
 									end
 
 									-- Display amount word
@@ -3888,7 +4501,12 @@ function Frame()
 									reaper.ImGui_EndGroup(ctx)
 									
 									-- reaper.ImGui_PopStyleColor(ctx, 1)
-									ToolTip("Left-click: Enable/disable modulation\nAlt-click: Delete modulation")
+									-- ToolTip("Left-click: Enable/disable modulation\nAlt-click: Delete modulation")
+									if t_pm_data.link_source_param > 7 then										
+										ToolTip("Left-click: Open/close Snapheap\nRight-click: Enable/disable modulation\nAlt-click: Delete modulation")
+									else
+										ToolTip("Right-click: Enable/disable modulation\nAlt-click: Delete modulation")
+									end
 
 									local unlink_confirmed
 									if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
@@ -3904,18 +4522,29 @@ function Frame()
 												end	
 											end
 
-										-- Logic to active or de-active modulation											
 										else
-											if t_pm_data.link_active == 0 then	  
-												t_pm_data.link_active = 1
-												reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.active", 1)
-											else
-												t_pm_data.link_active = 0
-												reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.active", 0)
-												reaper.TrackFX_SetParam(track, t_last_param.fx, t_last_param.param, t_pm_data.baseline)
+											if t_pm_data.link_source_param > 7 then
+												local index = 1
+												if t_pm_data.link_source_param > 7 and t_pm_data.link_source_param <= 9 then index = 1 end
+												if t_pm_data.link_source_param > 9 and t_pm_data.link_source_param <= 11 then index = 3 end											
+												if t_pm_data.link_source_param > 11 and t_pm_data.link_source_param <= 13 then index = 5 end																						
+												OpenSnapheap(track, mod_container_id, index)
 											end
 										end
 									end
+
+									-- Logic to active or de-active modulation											
+									if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Right()) then
+										if t_pm_data.link_active == 0 then	  
+											t_pm_data.link_active = 1
+											reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.active", 1)
+										else
+											t_pm_data.link_active = 0
+											reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.active", 0)
+											reaper.TrackFX_SetParam(track, t_last_param.fx, t_last_param.param, t_pm_data.baseline)
+										end
+									end										
+
 
 									if user_os == "Win" and modal_popup_id == "remove_mapping" and modal_popup == true then
 										local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
@@ -3934,7 +4563,8 @@ function Frame()
 									if t_pm_data.link_source_param > 7 then
 										mod_slider_color = t_color_palette[mod_index]
 									else
-										mod_slider_color = UI_color
+										-- mod_slider_color = UI_color
+										mod_slider_color = t_color_palette[mod_container_table_id]
 									end	
 
 									-- Show mod amount value of 0% in blinking RED if no mod amount to give a clear feedback to the user									
@@ -4041,15 +4671,35 @@ function Frame()
 
 				local header_state_source		
 				reaper.ImGui_PushFont(ctx, fonts.medium_bold)
-				local header_name_source = "MOD SOURCES"			
+				local header_name_source = "MOD SOURCES"	
+				if full == 1 then header_name_source = "OVERVIEW" end		
 				header_name_source = ClipText(header_name_source, width - win_padding_x)			
 				local previous_x, previous_y = reaper.ImGui_GetCursorPos(ctx)			
 
 				local header_rounding
 				if custom_headers["Header_Source"] == false then header_rounding = 9 else header_rounding = 0 end
 
-				custom_headers["Header_Source"] = CustomCollapsingHeader(ctx, "Header_Source", header_name_source, width, 20, header_rounding)
-				local x, y = reaper.ImGui_GetCursorPos(ctx)
+				local x, y = reaper.ImGui_GetCursorPos(ctx)	
+				reaper.ImGui_SetCursorPos(ctx, x, y + 1)
+
+				custom_headers["Header_Source"] = CustomCollapsingHeader(ctx, "Header_Source", header_name_source, width - (width / 5), 20, header_rounding)
+
+				local x, y = reaper.ImGui_GetCursorPos(ctx)				
+
+				-- Overview Icon				
+				reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 0)
+				reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 0, 0)			
+				reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ItemSpacing(), 1, 1)
+				reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonHovered(), track_color)
+				reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonActive(), track_color)
+
+				reaper.ImGui_SameLine(ctx)
+				reaper.ImGui_SetCursorPos(ctx, width - (width / 5) + 1, y - 20)
+				OverviewButton(ctx, width / 5 - 1, 20, track)
+				reaper.ImGui_PopStyleColor(ctx, 2)
+				reaper.ImGui_PopStyleVar(ctx, 3)
+
+				reaper.ImGui_SetCursorPos(ctx, x, y)
 
 				reaper.ImGui_PopFont(ctx)
 				if custom_headers["Header_Source"] then									
@@ -4060,59 +4710,624 @@ function Frame()
 						reaper.ImGui_Dummy(ctx, 0, 0)	
 
 						-- Multiple Flashmob instances selector
-						FlashmobInstanceSelector(track)
+						FlashmobInstanceSelector(track, 1)
 
 						if not flashmob_is_invalid then
 							-- Calcule Mod Graph Data here to be able to switch tabs without interupting the graphs
 							for i=1, 6 do
 								ModGraphData(track, mod_container_id, i)
 							end
-						end					
+						end	
 
-						reaper.ImGui_BeginTabBar(ctx, "MyTabs")
+						-- Active macro mod when overview is enable
+						if full == 1 then
+							if not previous_macro_mod_enable then
+								previous_macro_mod_enable = macro_mod_enable
+								macro_mod_enable = 1
+							end
+						else				
+							if previous_macro_mod_enable then			
+								macro_mod_enable = previous_macro_mod_enable
+								previous_macro_mod_enable = nil
+							end
+						end						
 
-						local screen_x, screen_y = reaper.ImGui_GetCursorScreenPos(ctx)	
-
-						reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ItemInnerSpacing(), 2, 4) -- Reduce space between tab items
-
-						-- Check if the parameter is linked to anything (including link the user made without Flashmob)		
-						local param_is_linked_to_anything = t_pm_data.link_active	
-
-						-- Reload last saved tab
-						local flags = {0, 0, 0} -- Initialize all flags to 0
-						if reload_settings == true and tab_to_load then
-							if tab_to_load >= 1 and tab_to_load <= 3 then
-								flags[tab_to_load] = reaper.ImGui_TabItemFlags_SetSelected() -- Set the selected flag for the specified tab
-							end	
-						end
-						flag1, flag2, flag3 = table.unpack(flags) -- Unpack the flags back into	
-
-
-						-- Draw a line below the tab item to indicate that mod is active on the last-touched FX param
-						if t_pm_data.link_source_fx == mod_container_id and t_pm_data.link_source_param > 7 then
+						if full == 1 then 
+							-- reaper.ImGui_Dummy(ctx, 0, 0)
 							local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
-							local line_color = track_color
-							if line_color == UI_color then line_color = full_white end
-							reaper.ImGui_DrawList_AddLine(draw_list, screen_x, screen_y - 5, screen_x + width / 3 - win_padding_x + 1, screen_y - 5, line_color, 2)
-						end
+							reaper.ImGui_BeginChild(ctx, "Full", size_wIn, size_hIn, borderIn, reaper.ImGui_ChildFlags_AutoResizeY()) -- To restrict the scrollbar to the mod tab content						
+							reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ChildBorderSize(), 1)	
+							reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ChildRounding(), 6)
+							local child_border_col
+							if track_color == UI_color then
+								child_border_col = white
+							else
+								child_border_col = track_color
+							end
+							reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Border(), DarkerColor2(UI_color, 0.3))						
+							t_overview = GetOverview(track)
 
-						reaper.ImGui_SetNextItemWidth(ctx, width / 3 - win_padding_x + 2)
-						if reaper.ImGui_BeginTabItem(ctx, "Mod", false, flag1) then								
-							opened_tab = 1
-							if not flashmob_is_invalid then
-								for i=1, 6 do
-									ModChild(track, mod_container_id, i, t_last_param.fx, t_last_param.param, track_sel_changed, param_is_linked_to_anything)						
+							lfo_strength_adjust = nil							
+							acs_strength_adjust = nil	
+							overview_baseline = nil
+							overview_scale = nil	
+							hover_lfo = nil
+							hover_acs = nil					
+
+							-- Count how many lines are gonna be displayed to calculate the child height
+							local counts = {}
+							local counts_line = {}
+							for _, it in ipairs(t_overview) do
+								counts[it.fx_id] = (counts[it.fx_id] or 0) + 1
+								if not counts_line[it.fx_id] then counts_line[it.fx_id] = 0 end
+								if it.link_active == 1 then counts_line[it.fx_id] = counts_line[it.fx_id] + 1 end
+								if it.lfo_active == 1 then counts_line[it.fx_id] = counts_line[it.fx_id] + 1 end
+								if it.acs_active == 1 then counts_line[it.fx_id] = counts_line[it.fx_id] + 1 end
+								if it.midi_learn and it.midi_learn ~= 0 then counts_line[it.fx_id] = counts_line[it.fx_id] + 1 end
+							end							
+
+							local last_fx = nil
+							local child_open = false
+
+							local avail = reaper.ImGui_GetContentRegionAvail(ctx)							
+
+							for i=1, #t_overview do
+								local item = t_overview[i]
+								local overview_color
+								local slider_color = full_white
+
+								if item.fx_id ~= last_fx then
+									if child_open then
+										reaper.ImGui_EndChild(ctx)
+										child_open = false									
+									end
+
+									last_fx = item.fx_id
+
+									-- compute exact height for this group
+									local n = counts[item.fx_id]
+									local n_mod = counts_line[item.fx_id]
+																	
+									local line_h = reaper.ImGui_GetFrameHeight(ctx) + 8
+									local line_mod_h = reaper.ImGui_GetFrameHeight(ctx) + 1
+									local height = 34 + (line_h * n) + (line_mod_h * n_mod)
+
+									child_open = reaper.ImGui_BeginChild(ctx, item.fx_id, avail, height, reaper.ImGui_ChildFlags_Border(), reaper.ImGui_ChildFlags_AutoResizeY())
 								end
 
-								-- If any MOD popup is open, set macro_mod_enable to 1 to be able to click and set modulated MACRO as last-touched FX param
-								local modPopup_open
-								for i=1, 6 do
-									if _G["modPopup" .. i] == 1 then
-										modPopup_open = true
+							-- for _, item in ipairs(t_overview) do
+								if child_open then
+
+									reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 4, 2)
+
+									-- Draw FX name if this is a new FX
+									if i == 1 or item.fx_id ~= t_overview[i-1].fx_id then
+										local screen_x, screen_y = reaper.ImGui_GetCursorScreenPos(ctx)
+										local fx_name_bg = DarkerColor2(UI_color, 0.88)
+										reaper.ImGui_DrawList_AddRectFilled(draw_list, screen_x - win_padding_x, screen_y - win_padding_y + 2, screen_x + avail - win_padding_x, screen_y - win_padding_y + 26, fx_name_bg, 7, reaper.ImGui_DrawFlags_RoundCornersTop())
+
+										local fx_name_col = white
+
+										local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, item.fx_name)
+										local x, y = reaper.ImGui_GetCursorPos( ctx )
+										reaper.ImGui_SetCursorPos(ctx, x, y+2)
+										reaper.ImGui_InvisibleButton(ctx, "hover_area_fx", text_size_x, text_size_y)
+
+										if reaper.ImGui_IsItemHovered(ctx) then
+											fx_name_col = full_white											
+										end
+
+										-- Open FX
+										if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+											if reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Ctrl()) then
+												reaper.TrackFX_Show(track, item.fx_id, 3) -- In floating window					
+											else
+												reaper.TrackFX_Show(track, item.fx_id, 1) -- In FXchain	
+											end
+										end					
+
+										-- Draw the fx name
+										reaper.ImGui_SameLine(ctx)
+										reaper.ImGui_PushFont(ctx, fonts.medium_bold)
+										reaper.ImGui_SetCursorPos(ctx, x, y)
+										local width_for_fxName = reaper.ImGui_GetContentRegionAvail(ctx)
+										local fx_name_clipped = ClipText(item.fx_name, width_for_fxName)
+										reaper.ImGui_TextColored(ctx, fx_name_col, fx_name_clipped)
+										if fx_name_clipped ~= item.fx_name then ToolTip(item.fx_name) end
+										reaper.ImGui_PopFont(ctx)
+
+										local screen_x, screen_y = reaper.ImGui_GetCursorScreenPos(ctx)
+										-- reaper.ImGui_DrawList_AddLine(draw_list, screen_x - win_padding_x, screen_y - 1, screen_x + avail - win_padding_x, screen_y - 1, child_border_col, 1)
+										reaper.ImGui_DrawList_AddLine(draw_list, screen_x - win_padding_x, screen_y - 1, screen_x + avail - win_padding_x, screen_y - 1, DarkerColor2(UI_color, 0.3), 1)
+										reaper.ImGui_Dummy(ctx, 0, 6)
+
+									end
+
+									if track_color == UI_color then
+										overview_color = DarkerColor2(full_white, 0.2)
+										-- slider_color = full_white
+									else
+										overview_color = DarkerColor2(track_color, 0.1)
+										-- slider_color = DarkerColor2(track_color, 0.1)
+									end
+									local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, item.param_name)
+									local x, y = reaper.ImGui_GetCursorPos( ctx )
+									-- reaper.ImGui_SetCursorPos(ctx, x, y + 8)
+									reaper.ImGui_InvisibleButton(ctx, "hover_area", text_size_x, text_size_y)
+
+									if reaper.ImGui_IsItemHovered(ctx) then
+										-- overview_color = full_white
+										if track_color == UI_color then
+											overview_color = full_white
+										else
+											overview_color = BrighterColor2(track_color, 0.3)
+										end
+									end
+
+									-- Set as last touched parameter
+									if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+										local current_val = reaper.TrackFX_GetParam(track, item.fx_id, item.param_id)
+										reaper.TrackFX_SetParam(track, item.fx_id, item.param_id, current_val) -- To set as last touched param
+									end		
+
+									-- Delete modulation
+									local unlink_confirmed								
+									if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Alt()) then																														
+										local current_val = reaper.TrackFX_GetParam(track, item.fx_id, item.param_id)
+										reaper.TrackFX_SetParam(track, item.fx_id, item.param_id, current_val) -- To set as last touched param
+
+										if user_os == "Win" then
+											StartModalWorkaround("remove_mapping_mod_assign_list" .. i)
+										else	
+											local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove all the associated modulations?", "REMOVE MODULATIONS?", 4)
+											if user_input_remove_mapping == 6 then -- YES
+												unlink_confirmed = true
+											end	
+										end					
+										-- UnlinkParam(track, item.fx_id, item.param_id)	
+									end				
+
+									if user_os == "Win" and modal_popup_id == "remove_mapping_mod_assign_list" .. i and modal_popup == true then
+										local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove all the associated modulations?", "REMOVE MODULATIONS?", 4)
+										if user_input_remove_mapping == 6 then -- YES
+											unlink_confirmed = true
+										end			
+										ResetModalWorkaroundVariables()
+									end										
+
+									if unlink_confirmed == true then	
+										UnlinkParam(track, item.fx_id, item.param_id)
+										reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".mod.active", 0)
+										reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".lfo.active", 0)
+										reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".acs.active", 0)
+										reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".learn.midi1", "")
+										reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".learn.midi2", "")
+									end
+
+
+									-- Draw the param name with the determined color
+									reaper.ImGui_SetCursorPos(ctx, x, y)	
+
+									local width_for_paramName = width * 0.5 - win_padding_x * 2 - 4
+									local param_name_clipped = ClipText(item.param_name, width_for_paramName)
+									reaper.ImGui_TextColored(ctx, overview_color, param_name_clipped)
+									if param_name_clipped ~= item.param_name then ToolTip(item.param_name) end									
+									ToolTip("Alt-click: Delete all associated modulations")									
+
+									-- Show baseline and mod amount sliders
+									reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 0)
+
+									local link_active = item.link_active
+									local lfo_active = item.lfo_active
+									local acs_active = item.acs_active
+									local midi_learn = item.midi_learn
+
+									local _, offset, offset_formatted																	
+									local val, min, max = reaper.TrackFX_GetParamEx(track, item.fx_id, item.param_id)
+									if link_active == 1 or lfo_active == 1 or acs_active == 1 then
+										_, offset = reaper.TrackFX_GetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".mod.baseline")
+									else
+										offset = reaper.TrackFX_GetParam(track, item.fx_id, item.param_id)
+									end
+
+									if max ~= 1 then -- If effect is a JSFX
+										-- last_touched_param_value = (last_touched_param_value / max) - min -- Useful for JSFX with parameter value range > 1
+										offset_formatted = offset
+										offset_formatted = string.format("%.2f", offset_formatted)
+										offset_formatted = offset_formatted:gsub("%%", "%%%%")						
+									else
+										rv, offset_formatted = reaper.TrackFX_FormatParamValueNormalized(track, item.fx_id, item.param_id, offset, "")												
+										offset_formatted = ReplaceRareUnicode(offset_formatted)	
+										offset_formatted = offset_formatted:gsub("%%", "%%%%")							
+									end
+
+									-- Special case of plugins not supporting the Cockos VST extension (hard-coded)
+									if item.fx_name_raw:find("Valhalla DSP") then
+										local baseline_rounded = string.format("%.2f", offset)
+										offset_formatted = baseline_rounded
+									end
+
+									reaper.ImGui_SameLine(ctx)
+
+									reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrab(), DarkerColor2(overview_color, 0.2))
+									reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrabActive(), DarkerColor2(overview_color, 0.2))
+									reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), slider_color)																									
+									reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Border(), DarkerColor2(overview_color, 0.8))
+									reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameBorderSize(), 0.1)																							
+
+									-- reaper.ImGui_SetCursorPosX(ctx, avail * 0.5 - 4)
+									reaper.ImGui_SetCursorPos(ctx, avail * 0.5 - 4, y - 2)
+									reaper.ImGui_SetNextItemWidth(ctx, avail * 0.5 - win_padding_x - 4)
+									local rv_offset, offset = reaper.ImGui_SliderDouble(ctx, "##offset" .. item.param_id, offset, min, max, offset_formatted)
+									if rv_offset then
+
+										overview_baseline = true -- show mod range on baseline slider while adjusting offset slider										
+
+										if link_active == 1 or lfo_active == 1 or acs_active == 1 then
+											-- active as last-touched FX param
+											local val = reaper.TrackFX_GetParam(track, item.fx_id, item.param_id)
+											reaper.TrackFX_SetParam(track, item.fx_id, item.param_id, val)
+
+											reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".mod.baseline", offset)
+										else
+											reaper.TrackFX_SetParam(track, item.fx_id, item.param_id, offset)
+										end										
+									end																												
+
+									reaper.ImGui_PopStyleVar(ctx, 1)
+									reaper.ImGui_PopStyleColor(ctx, 4)	
+
+									-- Draw MOD or MACRO slider
+									local rv_amount
+									
+									if link_active == 1 then
+
+										local _, link_source_fx = reaper.TrackFX_GetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".plink.effect")
+										local _, link_source_param = reaper.TrackFX_GetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".plink.param")																													
+										link_source_fx = tonumber(link_source_fx)
+										link_source_param = tonumber(link_source_param)
+
+										local mod_or_macro
+										local flashmob_inst
+										for j=1, #t_flashmob_id do
+											if link_source_fx == t_flashmob_id[j] then												
+												if link_source_param < 7 then
+													mod_or_macro = "Macro"												
+												else
+													mod_or_macro = "Mod"
+												end
+												flashmob_inst = j
+												break	
+											end
+										end			
+										if not mod_or_macro then mod_or_macro = "Unknown" end
+
+										local x, y = reaper.ImGui_GetCursorPos(ctx)
+										reaper.ImGui_SetCursorPosY(ctx, y + 1)
+
+										reaper.ImGui_BeginGroup(ctx)
+										reaper.ImGui_TextColored(ctx, UI_color, mod_or_macro)
+
+										-- Display mod number in a circle
+										reaper.ImGui_SameLine(ctx)	
+										local center_x, center_y = reaper.ImGui_GetCursorScreenPos(ctx)
+
+										-- local slider_color = UI_color
+										if mod_or_macro ~= "Unknown" then
+											if link_source_param > 7 then
+												reaper.ImGui_DrawList_AddCircle(draw_list, center_x + 4, center_y + 6, 8, t_color_palette[link_source_param - 7], num_segmentsIn, thicknessIn)
+												-- slider_color = t_color_palette[link_source_param - 7]
+											else
+												-- reaper.ImGui_DrawList_AddCircle(draw_list, center_x + 4, center_y + 6, 8, UI_color, num_segmentsIn, thicknessIn)
+												reaper.ImGui_DrawList_AddRect(draw_list, center_x - 4, center_y - 2, center_x + 12, center_y + 14, t_color_palette[flashmob_inst], roundingIn, flagsIn, thicknessIn)												
+												-- slider_color = t_color_palette[flashmob_inst]
+											end
+
+											if link_source_param > 7 then
+												reaper.ImGui_TextColored(ctx, t_color_palette[link_source_param - 7], link_source_param - 7)
+											else
+												reaper.ImGui_TextColored(ctx, t_color_palette[flashmob_inst], link_source_param + 1)
+											end		
+										end	
+										reaper.ImGui_EndGroup(ctx)
+
+										if mod_or_macro == "Mod" and reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+											local index = 1
+											local _, link_source_param = reaper.TrackFX_GetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".plink.param")
+											link_source_param = tonumber(link_source_param)
+											if link_source_param > 7 and link_source_param <= 9 then index = 1 end
+											if link_source_param > 9 and link_source_param <= 11 then index = 3 end											
+											if link_source_param > 11 and link_source_param <= 13 then index = 5 end																						
+											OpenSnapheap(track, mod_container_id, index)
+										end											
+
+										reaper.ImGui_SameLine(ctx)	
+											
+										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrab(), DarkerColor2(slider_color, 0.4))
+										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrabActive(), DarkerColor2(slider_color, 0.4))
+										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), DarkerColor2(slider_color, 0.4))																								
+
+										reaper.ImGui_SetCursorPos(ctx, avail * 0.5 - 4, y - 1)
+										local _, amount = reaper.TrackFX_GetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".plink.scale")
+										local amount_formatted = string.format('%.1f %%%%', amount * 100)
+
+										reaper.ImGui_SetNextItemWidth(ctx, avail * 0.5 - win_padding_x - 4)
+										rv_amount, amount = reaper.ImGui_SliderDouble(ctx, "##amount" .. item.param_id, amount, -1, 1, amount_formatted)
+										if rv_amount then
+
+											show_mod_value = true
+											overview_scale = true -- show mod range on baseline slider while adjusting mod amount slider
+
+											-- active as last-touched FX param
+											local val = reaper.TrackFX_GetParam(track, item.fx_id, item.param_id)
+											reaper.TrackFX_SetParam(track, item.fx_id, item.param_id, val)
+
+											reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".plink.scale", amount)
+										end										
+
+										reaper.ImGui_PopStyleColor(ctx, 3)	
+
+									end	
+
+									-- Draw LFO slider
+									local rv_lfo_strength									
+
+									if lfo_active == 1 then
+
+										local x, y = reaper.ImGui_GetCursorPos(ctx)
+										reaper.ImGui_SetCursorPosY(ctx, y + 1)
+
+										reaper.ImGui_TextColored(ctx, UI_color, "Lfo")
+										reaper.ImGui_SameLine(ctx)
+
+										local screen_x, screen_y = reaper.ImGui_GetCursorScreenPos(ctx)										
+										SineWave(draw_list, screen_x, screen_y, 16, 14, UI_color, 2)
+
+										reaper.ImGui_SameLine(ctx)	
+										
+										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrab(), DarkerColor2(slider_color, 0.4))
+										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrabActive(), DarkerColor2(slider_color, 0.4))
+										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), DarkerColor2(slider_color, 0.4))																									
+
+										reaper.ImGui_SetCursorPos(ctx, avail * 0.5 - 4, y - 1)
+										local _, lfo_strength = reaper.TrackFX_GetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".lfo.strength")
+										-- lfo_strength = tonumber(lfo_strength)
+										local lfo_strength_formatted = string.format('%.1f %%%%', lfo_strength * 100)
+
+										reaper.ImGui_SetNextItemWidth(ctx, avail * 0.5 - win_padding_x - 4)
+										rv_lfo_strength, lfo_strength = reaper.ImGui_SliderDouble(ctx, "##lfo_strength" .. item.param_id, lfo_strength, 0, 1, lfo_strength_formatted)
+										if rv_lfo_strength then
+
+											lfo_strength_adjust = 1
+
+											-- active as last-touched FX param
+											local val = reaper.TrackFX_GetParam(track, item.fx_id, item.param_id)
+											reaper.TrackFX_SetParam(track, item.fx_id, item.param_id, val)
+
+											reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".lfo.strength", lfo_strength)											
+										end	
+
+										-- Show mod range on LAST FX PARAM baseline slider
+										if reaper.ImGui_IsItemHovered(ctx, reaper.ImGui_HoveredFlags_RectOnly()) then
+											hover_lfo = 1
+										end																											
+
+										reaper.ImGui_PopStyleColor(ctx, 3)	
+									end	
+
+									-- Draw ACS slider
+									local rv_acs_strength									
+
+									if acs_active == 1 then
+
+										local x, y = reaper.ImGui_GetCursorPos(ctx)
+										reaper.ImGui_SetCursorPosY(ctx, y + 1)
+
+										reaper.ImGui_TextColored(ctx, UI_color, "Acs")
+										reaper.ImGui_SameLine(ctx)
+
+										local screen_x, screen_y = reaper.ImGui_GetCursorScreenPos(ctx)										
+										ADEnvelope(draw_list, screen_x, screen_y, 16, 14, UI_color, 2)
+
+										reaper.ImGui_SameLine(ctx)	
+										
+										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrab(), DarkerColor2(slider_color, 0.4))
+										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrabActive(), DarkerColor2(slider_color, 0.4))
+										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), DarkerColor2(slider_color, 0.4))																									
+
+										reaper.ImGui_SetCursorPos(ctx, avail * 0.5 - 4, y - 1)
+										local _, acs_strength = reaper.TrackFX_GetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".acs.strength")
+										-- acs_strength = tonumber(acs_strength)
+										local acs_strength_formatted = string.format('%.1f %%%%', acs_strength * 100)
+
+										reaper.ImGui_SetNextItemWidth(ctx, avail * 0.5 - win_padding_x - 4)
+										rv_acs_strength, acs_strength = reaper.ImGui_SliderDouble(ctx, "##acs_strength" .. item.param_id, acs_strength, 0, 1, acs_strength_formatted)
+										if rv_acs_strength then
+
+											acs_strength_adjust = 1
+
+											-- active as last-touched FX param
+											local val = reaper.TrackFX_GetParam(track, item.fx_id, item.param_id)
+											reaper.TrackFX_SetParam(track, item.fx_id, item.param_id, val)
+
+											reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".acs.strength", acs_strength)
+										end	
+
+										if reaper.ImGui_IsItemHovered(ctx, reaper.ImGui_HoveredFlags_RectOnly()) then
+											hover_acs = 1
+										end										
+
+										reaper.ImGui_PopStyleColor(ctx, 3)	
+									end	
+
+									if midi_learn and midi_learn ~= 0 then
+
+										local x, y = reaper.ImGui_GetCursorPos(ctx)
+										reaper.ImGui_SetCursorPosY(ctx, y + 1)
+
+										reaper.ImGui_TextColored(ctx, UI_color, "Midi")
+										reaper.ImGui_SameLine(ctx)
+
+										local screen_x, screen_y = reaper.ImGui_GetCursorScreenPos(ctx)										
+										Midi(draw_list, screen_x - 3, screen_y, 16, 14, UI_color, 2)
+
+										reaper.ImGui_SameLine(ctx)	
+
+										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), white)
+										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonHovered(), DarkerColor2(UI_color, 0.4))
+										reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 4)																									
+
+										reaper.ImGui_SetCursorPos(ctx, avail * 0.5 - 4, y - 1)
+
+										if reaper.ImGui_Button(ctx, "Learn", avail * 0.5 - win_padding_x - 4, 16) then
+
+											-- active as last-touched FX param
+											local val = reaper.TrackFX_GetParam(track, item.fx_id, item.param_id)
+											reaper.TrackFX_SetParam(track, item.fx_id, item.param_id, val)
+
+											if user_os == "Win" then
+												StartModalWorkaround("nativeTab_midiLearn" .. i)
+											else
+												Command(41144) -- FX: Set MIDI learn for last touched FX parameter
+												GetPMData(track, item.fx_id, item.param_id)
+											end
+											-- Command(41144) -- FX: Set MIDI learn for last touched FX parameter
+										end	
+
+										if user_os == "Win" and modal_popup_id == "nativeTab_midiLearn" .. i and modal_popup == true then
+											Command(41144) -- FX: Set MIDI learn for last touched FX parameter			
+											GetPMData(track, item.fx_id, item.param_id)	
+											ResetModalWorkaroundVariables()
+										end										
+
+										reaper.ImGui_PopStyleVar(ctx, 1)
+										reaper.ImGui_PopStyleColor(ctx, 2)	
+									end																			
+
+									-- Update data
+									if rv_offset or rv_amount or rv_lfo_strength or rv_acs_strength then
+										GetLastTouchedFXParam(track)
+										GetPMData(track, item.fx_id, item.param_id)
+									end					
+
+									reaper.ImGui_PopStyleVar(ctx, 2)
+
+									if i < #t_overview and item.fx_id == t_overview[i+1].fx_id then
+										reaper.ImGui_Separator(ctx)										
+										reaper.ImGui_Dummy(ctx, 0, 0)																
+									end			
+								end													
+							end	
+
+							if child_open then								
+								reaper.ImGui_EndChild(ctx)
+							end
+
+							if #t_overview == 0 then
+								reaper.ImGui_PushTextWrapPos(ctx, width)
+								reaper.ImGui_Text(ctx, "This track does not have any modulation yet")
+								reaper.ImGui_PopTextWrapPos(ctx)
+							end
+
+							reaper.ImGui_PopStyleColor(ctx, 1)
+							reaper.ImGui_PopStyleVar(ctx, 2) -- FX Child
+							reaper.ImGui_EndChild(ctx)
+
+						else				
+
+							reaper.ImGui_BeginTabBar(ctx, "MyTabs")
+
+							local screen_x, screen_y = reaper.ImGui_GetCursorScreenPos(ctx)	
+
+							reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ItemInnerSpacing(), 2, 4) -- Reduce space between tab items
+
+							-- Check if the parameter is linked to anything (including link the user made without Flashmob)		
+							local param_is_linked_to_anything = t_pm_data.link_active	
+
+							-- Reload last saved tab
+							local flags = {0, 0, 0} -- Initialize all flags to 0
+							if reload_settings == true and tab_to_load then
+								if tab_to_load >= 1 and tab_to_load <= 3 then
+									flags[tab_to_load] = reaper.ImGui_TabItemFlags_SetSelected() -- Set the selected flag for the specified tab
+								end	
+							end
+							flag1, flag2, flag3 = table.unpack(flags) -- Unpack the flags back into	
+
+
+							-- Draw a line below the tab item to indicate that mod is active on the last-touched FX param
+							if t_pm_data.link_source_fx == mod_container_id and t_pm_data.link_source_param > 7 then
+								local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
+								local line_color = track_color
+								if line_color == UI_color then line_color = full_white end
+								reaper.ImGui_DrawList_AddLine(draw_list, screen_x, screen_y - 5, screen_x + width / 3 - win_padding_x + 1, screen_y - 5, line_color, 2)
+							end
+
+							reaper.ImGui_SetNextItemWidth(ctx, width / 3 - win_padding_x + 2)
+							if reaper.ImGui_BeginTabItem(ctx, "Mod", false, flag1) then								
+								opened_tab = 1
+								if not flashmob_is_invalid then
+									reaper.ImGui_BeginChild(ctx, "mod_child", size_wIn, size_hIn, borderIn, reaper.ImGui_ChildFlags_AutoResizeY()) -- To restrict the scrollbar to the mod tab content
+									for i=1, 6 do
+										ModChild(track, mod_container_id, i, t_last_param.fx, t_last_param.param, track_sel_changed, param_is_linked_to_anything)						
+									end
+									reaper.ImGui_EndChild(ctx)
+
+									-- If any MOD popup is open, set macro_mod_enable to 1 to be able to click and set modulated MACRO as last-touched FX param
+									local modPopup_open
+									for i=1, 6 do
+										if _G["modPopup" .. i] == 1 then
+											modPopup_open = true
+											break
+										end
+									end
+									if modPopup_open then
+										if not previous_macro_mod_enable then
+											previous_macro_mod_enable = macro_mod_enable
+											macro_mod_enable = 1
+										end
+									else				
+										if previous_macro_mod_enable then			
+											macro_mod_enable = previous_macro_mod_enable
+											previous_macro_mod_enable = nil
+										end
+									end
+
+								else
+									reaper.ImGui_PushTextWrapPos(ctx, width)
+									local invalid_flashmob_text = "Khs SnapHeap plugin is probably missing\nPlease read the manual for more info"
+									-- invalid_flashmob_text = WrapText(invalid_flashmob_text, width)								
+									reaper.ImGui_Text(ctx, invalid_flashmob_text)
+									reaper.ImGui_PopTextWrapPos(ctx)
+								end
+								reaper.ImGui_EndTabItem(ctx)
+							end
+
+							-- Draw a line below the tab item to indicate that macro is active on the last-touched FX param
+							if t_pm_data.link_source_fx == mod_container_id and t_pm_data.link_source_param <= 7 then							
+								local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
+								local line_color = track_color
+								if line_color == UI_color then line_color = full_white end							
+								reaper.ImGui_DrawList_AddLine(draw_list, screen_x + width / 3 - win_padding_x + 3, screen_y - 5, screen_x + (width / 3 * 2) - win_padding_x - 4, screen_y - 5, line_color, 2)
+							end						
+
+							reaper.ImGui_SetNextItemWidth(ctx, width / 3 - win_padding_x + 1)
+							if reaper.ImGui_BeginTabItem(ctx, "Macro", false, flag2) then		
+								opened_tab = 2
+								reaper.ImGui_BeginChild(ctx, "macro_child", size_wIn, size_hIn, borderIn, reaper.ImGui_ChildFlags_AutoResizeY()) -- To restrict the scrollbar to the mod tab content
+								for i=1, 8 do
+									Macro(track, mod_container_id, i, t_last_param.fx, t_last_param.param, track_sel_changed, param_is_linked_to_anything)
+								end	
+								reaper.ImGui_EndChild(ctx)	
+
+								-- If any MACRO popup is open, set macro_mod_enable to 1 to be able to click and set modulated MACRO as last-touched FX param
+								local macroPopup_open
+								for i=1, 8 do
+									if _G["macroPopup" .. i] == 1 then
+										macroPopup_open = true
 										break
 									end
 								end
-								if modPopup_open then
+								if macroPopup_open then
 									if not previous_macro_mod_enable then
 										previous_macro_mod_enable = macro_mod_enable
 										macro_mod_enable = 1
@@ -4124,99 +5339,57 @@ function Frame()
 									end
 								end
 
+								reaper.ImGui_EndTabItem(ctx)
+							end	
+
+							-- Draw a line below the tab item to indicate that native is active on the last-touched FX param
+							if t_pm_data.lfo_active == 1 or t_pm_data.acs_active == 1 or (t_pm_data.midi_learn and t_pm_data.midi_learn ~= 0) then							
+								local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
+								local line_color = track_color
+								if line_color == UI_color then line_color = full_white end							
+								reaper.ImGui_DrawList_AddLine(draw_list, screen_x + (width / 3 * 2) - win_padding_x - 2, screen_y - 5, screen_x + width - win_padding_x - 8, screen_y - 5, line_color, 2)
+							end												
+			
+							reaper.ImGui_SetNextItemWidth(ctx, width / 3 - win_padding_x + 1)
+							local tab_selected = reaper.ImGui_BeginTabItem(ctx, "Native", false, flag3)					
+							if t_last_param.param then
+
+								-- Get LFO data for first frame of the tab or if project state change
+								if (tab_selected and not previous_tab_selected) or (tab_selected and slower_defer_update) then
+									GetNativeLFOData(track, t_last_param.fx, t_last_param.param)
+									GetNativeACSData(track, t_last_param.fx, t_last_param.param)
+								end
+								-- Draw LFO GUI
+								if tab_selected then
+									DrawMIDILearn(track, t_last_param.fx, t_last_param.param)
+									DrawNativeLFO(track, t_last_param.fx, t_last_param.param)
+									DrawNativeACS(track, t_last_param.fx, t_last_param.param)													
+								end
+								previous_tab_selected = tab_selected											
 							else
-								local invalid_flashmob_text = "Khs SnapHeap plugin is probably missing\nPlease read the manual for more info"
-								invalid_flashmob_text = WrapText(invalid_flashmob_text, width)
-								reaper.ImGui_Text(ctx, invalid_flashmob_text)
-							end
-							reaper.ImGui_EndTabItem(ctx)
-						end
-
-						-- Draw a line below the tab item to indicate that macro is active on the last-touched FX param
-						if t_pm_data.link_source_fx == mod_container_id and t_pm_data.link_source_param <= 7 then							
-							local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
-							local line_color = track_color
-							if line_color == UI_color then line_color = full_white end							
-							reaper.ImGui_DrawList_AddLine(draw_list, screen_x + width / 3 - win_padding_x + 3, screen_y - 5, screen_x + (width / 3 * 2) - win_padding_x - 4, screen_y - 5, line_color, 2)
-						end						
-
-						reaper.ImGui_SetNextItemWidth(ctx, width / 3 - win_padding_x + 1)
-						if reaper.ImGui_BeginTabItem(ctx, "Macro", false, flag2) then		
-							opened_tab = 2
-							for i=1, 8 do
-								Macro(track, mod_container_id, i, t_last_param.fx, t_last_param.param, track_sel_changed, param_is_linked_to_anything)
-							end		
-
-							-- If any MACRO popup is open, set macro_mod_enable to 1 to be able to click and set modulated MACRO as last-touched FX param
-							local macroPopup_open
-							for i=1, 8 do
-								if _G["macroPopup" .. i] == 1 then
-									macroPopup_open = true
-									break
+								if tab_selected then
+									reaper.ImGui_PushTextWrapPos(ctx, 0)
+									reaper.ImGui_Text(ctx, "No last-touched FX parameter detected")
+									reaper.ImGui_PopTextWrapPos(ctx)
 								end
-							end
-							if macroPopup_open then
-								if not previous_macro_mod_enable then
-									previous_macro_mod_enable = macro_mod_enable
-									macro_mod_enable = 1
-								end
-							else				
-								if previous_macro_mod_enable then			
-									macro_mod_enable = previous_macro_mod_enable
-									previous_macro_mod_enable = nil
-								end
-							end
+							end								
 
-							reaper.ImGui_EndTabItem(ctx)
-						end	
-
-						-- Draw a line below the tab item to indicate that native is active on the last-touched FX param
-						if t_pm_data.lfo_active == 1 or t_pm_data.acs_active == 1 or t_pm_data.midi_learn then							
-							local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
-							local line_color = track_color
-							if line_color == UI_color then line_color = full_white end							
-							reaper.ImGui_DrawList_AddLine(draw_list, screen_x + (width / 3 * 2) - win_padding_x - 2, screen_y - 5, screen_x + width - win_padding_x - 8, screen_y - 5, line_color, 2)
-						end												
-		
-						reaper.ImGui_SetNextItemWidth(ctx, width / 3 - win_padding_x + 1)
-						local tab_selected = reaper.ImGui_BeginTabItem(ctx, "Native", false, flag3)					
-						if t_last_param.param then
-
-							-- Get LFO data for first frame of the tab or if project state change
-							if (tab_selected and not previous_tab_selected) or (tab_selected and slower_defer_update) then
-								GetNativeLFOData(track, t_last_param.fx, t_last_param.param)
-								GetNativeACSData(track, t_last_param.fx, t_last_param.param)
-							end
-							-- Draw LFO GUI
 							if tab_selected then
-								DrawMIDILearn(track, t_last_param.fx, t_last_param.param)
-								DrawNativeLFO(track, t_last_param.fx, t_last_param.param)
-								DrawNativeACS(track, t_last_param.fx, t_last_param.param)													
-							end
-							previous_tab_selected = tab_selected											
-						else
-							if tab_selected then
-								reaper.ImGui_PushTextWrapPos(ctx, 0)
-								reaper.ImGui_Text(ctx, "No last-touched FX parameter detected")
-								reaper.ImGui_PopTextWrapPos(ctx)
-							end
-						end								
+								opened_tab = 3
+								reaper.ImGui_EndTabItem(ctx)
+							end				
 
-						if tab_selected then
-							opened_tab = 3
-							reaper.ImGui_EndTabItem(ctx)
-						end				
+							-- Save opened tab when tab selection change
+							if opened_tab ~= last_opened_tab then
+								reaper.SetProjExtState(0, "vf_flashmob", "last_tab", opened_tab)
+								last_opened_tab = opened_tab
+							end
 
-						-- Save opened tab when tab selection change
-						if opened_tab ~= last_opened_tab then
-							reaper.SetProjExtState(0, "vf_flashmob", "last_tab", opened_tab)
-							last_opened_tab = opened_tab
+							reaper.ImGui_PopStyleVar(ctx, 1) -- Pop ItemInnerSpacing
+
+							reaper.ImGui_EndTabBar(ctx)
 						end
-
-						reaper.ImGui_PopStyleVar(ctx, 1) -- Pop ItemInnerSpacing
-
-						reaper.ImGui_EndTabBar(ctx)
-						reaper.ImGui_EndChild(ctx)
+						reaper.ImGui_EndChild(ctx)						
 					end
 				else
 					header_state_source = 0
@@ -4294,10 +5467,11 @@ function Frame()
 
 
 	local popup_open = reaper.ImGui_IsPopupOpen(ctx, "", reaper.ImGui_PopupFlags_AnyPopupId() | reaper.ImGui_PopupFlags_AnyPopupLevel()) -- Check if any popup is opened	
-	if reaper.ImGui_IsMouseReleased(ctx, reaper.ImGui_MouseButton_Left() or reaper.ImGui_IsMouseReleased(ctx, reaper.ImGui_MouseButton_Right())) and popup_open == false then
+	-- if (reaper.ImGui_IsMouseReleased(ctx, reaper.ImGui_MouseButton_Left()) or reaper.ImGui_IsMouseReleased(ctx, reaper.ImGui_MouseButton_Right())) and popup_open == false and combo_open == false then
+	if (reaper.ImGui_IsMouseReleased(ctx, reaper.ImGui_MouseButton_Left()) or reaper.ImGui_IsMouseReleased(ctx, reaper.ImGui_MouseButton_Right())) and popup_open == false then
 		local reaper_context = reaper.GetCursorContext2(true)
 		reaper.SetCursorContext(reaper_context) -- Set focus back to Reaper
-	end		
+	end	
 
 	previous_proj_state = proj_state  
 	-- if first_run then first_run = false; reload_settings = false end
@@ -4319,6 +5493,8 @@ function Frame()
 end
 
 function Loop()
+	-- local start = reaper.time_precise()
+
 	reaper.ImGui_PushFont(ctx, fonts.medium)
 	reaper.ImGui_SetNextWindowSize(ctx, 480, 320, reaper.ImGui_Cond_FirstUseEver())
 	reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_WindowRounding(), 10, val2In)
@@ -4342,7 +5518,7 @@ function Loop()
 		end
 	end
 
-	reaper.ImGui_SetNextWindowSizeConstraints(ctx, 136, main_height, 600, main_height)
+	reaper.ImGui_SetNextWindowSizeConstraints(ctx, 160, main_height, 600, main_height)
 
 	SetTheme()
 
@@ -4388,12 +5564,15 @@ function Loop()
 	reaper.ImGui_PopStyleVar(ctx, 3)
 	reaper.ImGui_PopFont(ctx)	
 
+	-- local elapsed = reaper.time_precise() - start
+	-- Print("Script executed in ".. elapsed .." seconds")	
+
 	if open then
 		reaper.defer(Loop)
 	end
 end
 
---local start = reaper.time_precise()
+-- local start = reaper.time_precise()
 
 -- local profiler = dofile(reaper.GetResourcePath() ..
 --   '/Scripts/ReaTeam Scripts/Development/cfillion_Lua profiler.lua')
