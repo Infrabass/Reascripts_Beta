@@ -2,10 +2,10 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.5.1
+-- @Version 0.5.2
 -- @Changelog
---   Allow user to enable and manage native modulations via Flashmob even if no Flashmob FX is present on track
---   Add visual feedback for used MODS and used MACROS (colored scope lines and colored macro names)
+--   Fix ACS channel parameter reset to mono after enabling LFO
+--   Update last-touched FX param name after MACRO is rename
 -- @Provides
 --   [main] VF - Flashmob.lua
 --   vf_FLASHMOB.jsfx
@@ -85,6 +85,9 @@ Full Changelog:
 	v0.5.1
 		+ Allow user to enable and manage native modulations via Flashmob even if no Flashmob FX is present on track
 		+ Add visual feedback for used MODS and used MACROS (colored scope lines and colored macro names)	
+	v0.5.2
+		+ Fix ACS channel parameter reset to mono after enabling LFO
+		+ Update last-touched FX param name after MACRO is rename
 
 
 ]]
@@ -357,12 +360,8 @@ function GetLastTouchedFXParam(track)
 								break
 							end
 						end						
-
-						-- Print("new_param_guid_hack:")
-						-- Print(new_param_guid_hack)
-						-- Print("last_param_guid_hack:")
-						-- Print(last_param_guid_hack)						
-						if new_param_guid_hack ~= last_param_guid_hack then
+						
+						if new_param_guid_hack ~= last_param_guid_hack or force_update then
 							-- Bingo, a new parameter have been detected							
 
 							if flashmob_inst and param <= 7 and macro_mod_enable == 0 then -- If last-touched FX param is a macro of any Flashmob on the track
@@ -394,7 +393,8 @@ function GetLastTouchedFXParam(track)
 									end
 								end
 								result = 1
-							end							
+							end	
+							force_update = nil						
 						else
 							-- The last-touched parameter is valid but isn't new			
 							result = 0
@@ -772,6 +772,8 @@ function ToggleNativeACS(track, fx, param, state)
 			reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.stereo", 1)
 			reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.attack", 150)
 		end
+
+		reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".acs.stereo", 1) -- Set to stereo to counteract a Reaper bug: When ACS is bypassed, enabling LFO reset ACS Stereo to 0 (mono channel)
 
 		reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".mod.active", 1)	-- Active PM
 	end	
@@ -1977,6 +1979,7 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 			else					
 				reaper.TrackFX_SetParam(track, fx, macro_param_id, macro_val) -- To set as last touched param
 				Command(41145) -- FX: Set alias for last touched FX parameter
+				force_update = true
 			end
 		end		
 
@@ -4313,7 +4316,13 @@ function Frame()
 				if custom_headers["Header_Param"] then	
 					header_state_param = 1
 					reaper.ImGui_SetCursorPos(ctx, x, y) -- Restore position after Header (instead of using the position of the overlapping text)								
-					if reaper.ImGui_BeginChild(ctx, 'FX Param', 0, 105, child_flags, window_flags) then -- Set a fixed size for the FX parameter space
+					local fx_param_child_size
+					if rv_flashmob == true then
+						fx_param_child_size = 105
+					else
+						fx_param_child_size = 66
+					end
+					if reaper.ImGui_BeginChild(ctx, 'FX Param', 0, fx_param_child_size, child_flags, window_flags) then -- Set a fixed size for the FX parameter space
 						reaper.ImGui_Dummy(ctx, 0, 0)				
 						if param_is_valid == true then -- If there is a valid last touched parameter				
 
@@ -4537,214 +4546,216 @@ function Frame()
 							end															
 
 							-- Mod amount slider
-							local show_mod_slider
-							if reaper.ImGui_IsWindowDocked(ctx) then
-								if param_link > -1 then -- If last touched parameter is linked
+							if rv_flashmob == true then
+								local show_mod_slider
+								if reaper.ImGui_IsWindowDocked(ctx) then
+									if param_link > -1 then -- If last touched parameter is linked
+										show_mod_slider = 1
+									end
+								else
 									show_mod_slider = 1
 								end
-							else
-								show_mod_slider = 1
-							end
-							if show_mod_slider == 1 then															
-								local mod_amount_text_color = DarkerColor2(full_white, 0.2)
+								if show_mod_slider == 1 then															
+									local mod_amount_text_color = DarkerColor2(full_white, 0.2)
 
-								if param_link > -1 and param_link < 2 then -- If last touched parameter is linked to the selected Flashmob instance (no matter if its activated or not)
-									reaper.ImGui_PushFont(ctx, fonts.medium_bold)
+									if param_link > -1 and param_link < 2 then -- If last touched parameter is linked to the selected Flashmob instance (no matter if its activated or not)
+										reaper.ImGui_PushFont(ctx, fonts.medium_bold)
 
-									local amount_pre_text
-									if t_pm_data.link_source_param > 7 then
-										amount_pre_text = "Mod"
-									else
-										amount_pre_text = "Macro"
-									end
-									local full_text = amount_pre_text .. " 1 " .. "amount"
-									local text_w, text_h = reaper.ImGui_CalcTextSize(ctx, full_text)
-
-
-									-- Set the amount text color (darker if modulation is disabled)
-									if t_pm_data.link_active == nil or t_pm_data.link_active == 0 then
-										mod_amount_text_color = DarkerColor2(full_white, 0.7)	
-									end
-
-									-- Highlight text when mouse hovering
-									local rect_x, rect_y = reaper.ImGui_GetCursorScreenPos(ctx)
-									if reaper.ImGui_IsMouseHoveringRect(ctx, rect_x, rect_y + 8, rect_x + text_w + 11, rect_y + 6 + text_h, clipIn) then
-										mod_amount_text_color = BrighterColor2(mod_amount_text_color, 0.2)
-									end	
-
-									-- Get linked modulator index (mod or macro)
-									local mod_index
-									if t_pm_data.link_source_param > 7 then
-										mod_index = t_pm_data.link_source_param - 7 -- Hard-coded number of modulators (0-based)
-									else
-										mod_index = t_pm_data.link_source_param + 1 -- Hard-coded number of macros (0-based)
-									end
-
-									-- Display Mod amount text line
-									-- Add a pixel of separation with the UI above
-									local x_sep, y_sep = reaper.ImGui_GetCursorScreenPos(ctx)
-									reaper.ImGui_SetCursorScreenPos(ctx, x_sep, y_sep + 1)								
-									reaper.ImGui_Dummy(ctx, 0, 0)
-
-									-- Display mod or macro word
-									reaper.ImGui_BeginGroup(ctx)
-									reaper.ImGui_TextColored(ctx, mod_amount_text_color, amount_pre_text)
-
-									-- Display mod number in a circle or a square
-									reaper.ImGui_SameLine(ctx)	
-									local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
-									local center_x, center_y = reaper.ImGui_GetCursorScreenPos(ctx)
-
-									if t_pm_data.link_source_param > 7 then										
-										reaper.ImGui_DrawList_AddCircle(draw_list, center_x + 4, center_y + 6, 8, t_color_palette[mod_index], num_segmentsIn, thicknessIn)
-									else
-										reaper.ImGui_DrawList_AddRect(draw_list, center_x - 4, center_y - 2, center_x + 12, center_y + 14, t_color_palette[mod_container_table_id], roundingIn, flagsIn, thicknessIn)
-										-- reaper.ImGui_DrawList_AddCircle(draw_list, center_x + 4, center_y + 6, 8, UI_color, num_segmentsIn, thicknessIn)
-									end
-
-									if t_pm_data.link_source_param > 7 then
-										reaper.ImGui_TextColored(ctx, t_color_palette[mod_index], mod_index)
-									else
-										reaper.ImGui_TextColored(ctx, t_color_palette[mod_container_table_id], mod_index)
-									end
-
-									-- Display amount word
-									reaper.ImGui_SameLine(ctx)	
-									reaper.ImGui_TextColored(ctx, mod_amount_text_color, "Amount")
-									reaper.ImGui_EndGroup(ctx)
-									
-									-- reaper.ImGui_PopStyleColor(ctx, 1)
-									-- ToolTip("Left-click: Enable/disable modulation\nAlt-click: Delete modulation")
-									if t_pm_data.link_source_param > 7 then										
-										ToolTip("Left-click: Open/close Snapheap\nRight-click: Enable/disable modulation\nAlt-click: Delete modulation")
-									else
-										ToolTip("Right-click: Enable/disable modulation\nAlt-click: Delete modulation")
-									end
-
-									local unlink_confirmed
-									if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
-
-										-- Delete modulation (while holding ALT)
-										if reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Alt()) then
-											if user_os == "Win" then
-												StartModalWorkaround("remove_mapping")
-											else	
-												local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
-												if user_input_remove_mapping == 6 then -- YES
-													unlink_confirmed = true
-												end	
-											end
-
+										local amount_pre_text
+										if t_pm_data.link_source_param > 7 then
+											amount_pre_text = "Mod"
 										else
-											if rv_flashmob == true and t_pm_data.link_source_param > 7 then
-												local index = 1
-												if t_pm_data.link_source_param > 7 and t_pm_data.link_source_param <= 9 then index = 1 end
-												if t_pm_data.link_source_param > 9 and t_pm_data.link_source_param <= 11 then index = 3 end											
-												if t_pm_data.link_source_param > 11 and t_pm_data.link_source_param <= 13 then index = 5 end																						
-												OpenSnapheap(track, mod_container_id, index)
-											end
+											amount_pre_text = "Macro"
 										end
-									end
+										local full_text = amount_pre_text .. " 1 " .. "amount"
+										local text_w, text_h = reaper.ImGui_CalcTextSize(ctx, full_text)
 
-									-- Logic to active or de-active modulation											
-									if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Right()) then
-										if t_pm_data.link_active == 0 then	  
-											t_pm_data.link_active = 1
-											reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.active", 1)
-										else
-											t_pm_data.link_active = 0
-											reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.active", 0)
-											reaper.TrackFX_SetParam(track, t_last_param.fx, t_last_param.param, t_pm_data.baseline)
+
+										-- Set the amount text color (darker if modulation is disabled)
+										if t_pm_data.link_active == nil or t_pm_data.link_active == 0 then
+											mod_amount_text_color = DarkerColor2(full_white, 0.7)	
 										end
-									end										
 
-
-									if user_os == "Win" and modal_popup_id == "remove_mapping" and modal_popup == true then
-										local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
-										if user_input_remove_mapping == 6 then -- YES
-											unlink_confirmed = true
-										end			
-										ResetModalWorkaroundVariables()
-									end										
-
-									if unlink_confirmed == true then									
-										UnlinkParam(track, t_last_param.fx, t_last_param.param)
-									end
-
-									-- Get MOD or MACRO color
-									local mod_slider_color
-									if t_pm_data.link_source_param > 7 then
-										mod_slider_color = t_color_palette[mod_index]
-									else
-										-- mod_slider_color = UI_color
-										mod_slider_color = t_color_palette[mod_container_table_id]
-									end	
-
-									-- Show mod amount value of 0% in blinking RED if no mod amount to give a clear feedback to the user									
-									local time = reaper.time_precise()
-									local blink_interval = 0.75 -- seconds
-									local mod_amount_value_color
-									if t_pm_data.link_source_param > 7 then
-										mod_amount_value_color = t_color_palette[mod_index]										
-									else
-										mod_amount_value_color = UI_color
-									end						
-
-									-- show mod range value text (while adjusting mod amount slider)
-									if t_pm_data.link_active and t_pm_data.link_active == 1 then
-										if show_mod_value == true or (t_pm_data.link_scale and t_pm_data.link_scale	== 0 and (time % (blink_interval * 2)) < blink_interval) then
-											reaper.ImGui_SameLine(ctx)		
-											reaper.ImGui_TextColored(ctx, mod_amount_value_color, string.format('%.1f %%', t_pm_data.link_scale*100))
+										-- Highlight text when mouse hovering
+										local rect_x, rect_y = reaper.ImGui_GetCursorScreenPos(ctx)
+										if reaper.ImGui_IsMouseHoveringRect(ctx, rect_x, rect_y + 8, rect_x + text_w + 11, rect_y + 6 + text_h, clipIn) then
+											mod_amount_text_color = BrighterColor2(mod_amount_text_color, 0.2)
 										end	
-									end
 
-									rv_link_scale, t_pm_data.link_scale = CustomSlider("Amount", t_pm_data.link_scale, 0, -1, 1, custom_widget_width, 13, 0, false, t_pm_data.link_active, 0, mod_slider_color, 1)
-									if rv_link_scale then
-										reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.scale", t_pm_data.link_scale)
-										-- rv, mod_range_slider = reaper.TrackFX_FormatParamValueNormalized(track, t_last_param.fx, t_last_param.param, t_pm_data.baseline + t_pm_data.link_scale, "")							
-									end
+										-- Get linked modulator index (mod or macro)
+										local mod_index
+										if t_pm_data.link_source_param > 7 then
+											mod_index = t_pm_data.link_source_param - 7 -- Hard-coded number of modulators (0-based)
+										else
+											mod_index = t_pm_data.link_source_param + 1 -- Hard-coded number of macros (0-based)
+										end
 
-									-- show mod range value text while adjusting mod amount slider
-									if reaper.ImGui_IsItemActive(ctx) then
-										show_mod_value = true
+										-- Display Mod amount text line
+										-- Add a pixel of separation with the UI above
+										local x_sep, y_sep = reaper.ImGui_GetCursorScreenPos(ctx)
+										reaper.ImGui_SetCursorScreenPos(ctx, x_sep, y_sep + 1)								
+										reaper.ImGui_Dummy(ctx, 0, 0)
+
+										-- Display mod or macro word
+										reaper.ImGui_BeginGroup(ctx)
+										reaper.ImGui_TextColored(ctx, mod_amount_text_color, amount_pre_text)
+
+										-- Display mod number in a circle or a square
+										reaper.ImGui_SameLine(ctx)	
+										local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
+										local center_x, center_y = reaper.ImGui_GetCursorScreenPos(ctx)
+
+										if t_pm_data.link_source_param > 7 then										
+											reaper.ImGui_DrawList_AddCircle(draw_list, center_x + 4, center_y + 6, 8, t_color_palette[mod_index], num_segmentsIn, thicknessIn)
+										else
+											reaper.ImGui_DrawList_AddRect(draw_list, center_x - 4, center_y - 2, center_x + 12, center_y + 14, t_color_palette[mod_container_table_id], roundingIn, flagsIn, thicknessIn)
+											-- reaper.ImGui_DrawList_AddCircle(draw_list, center_x + 4, center_y + 6, 8, UI_color, num_segmentsIn, thicknessIn)
+										end
+
+										if t_pm_data.link_source_param > 7 then
+											reaper.ImGui_TextColored(ctx, t_color_palette[mod_index], mod_index)
+										else
+											reaper.ImGui_TextColored(ctx, t_color_palette[mod_container_table_id], mod_index)
+										end
+
+										-- Display amount word
+										reaper.ImGui_SameLine(ctx)	
+										reaper.ImGui_TextColored(ctx, mod_amount_text_color, "Amount")
+										reaper.ImGui_EndGroup(ctx)
+										
+										-- reaper.ImGui_PopStyleColor(ctx, 1)
+										-- ToolTip("Left-click: Enable/disable modulation\nAlt-click: Delete modulation")
+										if t_pm_data.link_source_param > 7 then										
+											ToolTip("Left-click: Open/close Snapheap\nRight-click: Enable/disable modulation\nAlt-click: Delete modulation")
+										else
+											ToolTip("Right-click: Enable/disable modulation\nAlt-click: Delete modulation")
+										end
+
+										local unlink_confirmed
+										if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+
+											-- Delete modulation (while holding ALT)
+											if reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Alt()) then
+												if user_os == "Win" then
+													StartModalWorkaround("remove_mapping")
+												else	
+													local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
+													if user_input_remove_mapping == 6 then -- YES
+														unlink_confirmed = true
+													end	
+												end
+
+											else
+												if rv_flashmob == true and t_pm_data.link_source_param > 7 then
+													local index = 1
+													if t_pm_data.link_source_param > 7 and t_pm_data.link_source_param <= 9 then index = 1 end
+													if t_pm_data.link_source_param > 9 and t_pm_data.link_source_param <= 11 then index = 3 end											
+													if t_pm_data.link_source_param > 11 and t_pm_data.link_source_param <= 13 then index = 5 end																						
+													OpenSnapheap(track, mod_container_id, index)
+												end
+											end
+										end
+
+										-- Logic to active or de-active modulation											
+										if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Right()) then
+											if t_pm_data.link_active == 0 then	  
+												t_pm_data.link_active = 1
+												reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.active", 1)
+											else
+												t_pm_data.link_active = 0
+												reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.active", 0)
+												reaper.TrackFX_SetParam(track, t_last_param.fx, t_last_param.param, t_pm_data.baseline)
+											end
+										end										
+
+
+										if user_os == "Win" and modal_popup_id == "remove_mapping" and modal_popup == true then
+											local user_input_remove_mapping = reaper.ShowMessageBox("Are you sure you want to remove the mapping?", "REMOVE MAPPING?", 4)
+											if user_input_remove_mapping == 6 then -- YES
+												unlink_confirmed = true
+											end			
+											ResetModalWorkaroundVariables()
+										end										
+
+										if unlink_confirmed == true then									
+											UnlinkParam(track, t_last_param.fx, t_last_param.param)
+										end
+
+										-- Get MOD or MACRO color
+										local mod_slider_color
+										if t_pm_data.link_source_param > 7 then
+											mod_slider_color = t_color_palette[mod_index]
+										else
+											-- mod_slider_color = UI_color
+											mod_slider_color = t_color_palette[mod_container_table_id]
+										end	
+
+										-- Show mod amount value of 0% in blinking RED if no mod amount to give a clear feedback to the user									
+										local time = reaper.time_precise()
+										local blink_interval = 0.75 -- seconds
+										local mod_amount_value_color
+										if t_pm_data.link_source_param > 7 then
+											mod_amount_value_color = t_color_palette[mod_index]										
+										else
+											mod_amount_value_color = UI_color
+										end						
+
+										-- show mod range value text (while adjusting mod amount slider)
+										if t_pm_data.link_active and t_pm_data.link_active == 1 then
+											if show_mod_value == true or (t_pm_data.link_scale and t_pm_data.link_scale	== 0 and (time % (blink_interval * 2)) < blink_interval) then
+												reaper.ImGui_SameLine(ctx)		
+												reaper.ImGui_TextColored(ctx, mod_amount_value_color, string.format('%.1f %%', t_pm_data.link_scale*100))
+											end	
+										end
+
+										rv_link_scale, t_pm_data.link_scale = CustomSlider("Amount", t_pm_data.link_scale, 0, -1, 1, custom_widget_width, 13, 0, false, t_pm_data.link_active, 0, mod_slider_color, 1)
+										if rv_link_scale then
+											reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.scale", t_pm_data.link_scale)
+											-- rv, mod_range_slider = reaper.TrackFX_FormatParamValueNormalized(track, t_last_param.fx, t_last_param.param, t_pm_data.baseline + t_pm_data.link_scale, "")							
+										end
+
+										-- show mod range value text while adjusting mod amount slider
+										if reaper.ImGui_IsItemActive(ctx) then
+											show_mod_value = true
+										else
+											show_mod_value = false
+										end	
+										reaper.ImGui_PopFont(ctx)						
 									else
-										show_mod_value = false
-									end	
-									reaper.ImGui_PopFont(ctx)						
-								else
-									reaper.ImGui_Dummy(ctx, 0, 0)
-									local text_param_link
-									local amount_error_text_color
+										reaper.ImGui_Dummy(ctx, 0, 0)
+										local text_param_link
+										local amount_error_text_color
 
-									-- Set text color
-									if param_link == -1 then
-										amount_error_text_color = DarkerColor2(full_white, 0.7)
-									else
-										amount_error_text_color = DarkerColor2(full_white, 0.2)
+										-- Set text color
+										if param_link == -1 then
+											amount_error_text_color = DarkerColor2(full_white, 0.7)
+										else
+											amount_error_text_color = DarkerColor2(full_white, 0.2)
+										end
+
+										if param_link == -1 then
+											text_param_link = "No Link Modulation"
+										elseif param_link == 2 then
+											text_param_link = "Linked to another Flashmob"
+										elseif param_link == 3 then
+											text_param_link = "Linked to external parameter"
+										end
+
+										-- Add 1 pixel in y
+										local x, y = reaper.ImGui_GetCursorPos(ctx)
+										reaper.ImGui_SetCursorPosY(ctx, y + 1)
+
+										text_param_link_clipped = ClipText(text_param_link, width - win_padding_x * 2)
+										reaper.ImGui_TextColored(ctx, amount_error_text_color, text_param_link_clipped)
+										if text_param_link_clipped ~= text_param_link then ToolTip(text_param_link, 1) end							
+
+										-- Dummy slider (to keep the window size and avoid constant annoying redrawing)
+										local rv_dummy, dummy
+										if not dummy then dummy = 0 end
+										rv_dummy, dummy = CustomSlider("Dummy", dummy, 0, -1, 1, custom_widget_width, 13, 0, false, 0, 0, UI_color)								
 									end
-
-									if param_link == -1 then
-										text_param_link = "No Link Modulation"
-									elseif param_link == 2 then
-										text_param_link = "Linked to another Flashmob"
-									elseif param_link == 3 then
-										text_param_link = "Linked to external parameter"
-									end
-
-									-- Add 1 pixel in y
-									local x, y = reaper.ImGui_GetCursorPos(ctx)
-									reaper.ImGui_SetCursorPosY(ctx, y + 1)
-
-									text_param_link_clipped = ClipText(text_param_link, width - win_padding_x * 2)
-									reaper.ImGui_TextColored(ctx, amount_error_text_color, text_param_link_clipped)
-									if text_param_link_clipped ~= text_param_link then ToolTip(text_param_link, 1) end							
-
-									-- Dummy slider (to keep the window size and avoid constant annoying redrawing)
-									local rv_dummy, dummy
-									if not dummy then dummy = 0 end
-									rv_dummy, dummy = CustomSlider("Dummy", dummy, 0, -1, 1, custom_widget_width, 13, 0, false, 0, 0, UI_color)								
+									-- reaper.ImGui_PopStyleColor(ctx, 1)
 								end
-								-- reaper.ImGui_PopStyleColor(ctx, 1)
 							end
 
 							reaper.ImGui_Dummy(ctx, 0, 0)
@@ -5736,7 +5747,13 @@ function Loop()
 				end
 			end
 		end
-		if custom_headers["Header_Param"] then main_height = main_height + 110 end
+		if custom_headers["Header_Param"] then 
+			if rv_flashmob == true then
+				main_height = main_height + 110
+			else
+				main_height = main_height + 71
+			end
+		end
 	end
 
 	reaper.ImGui_SetNextWindowSizeConstraints(ctx, 160, main_height, 600, main_height)
