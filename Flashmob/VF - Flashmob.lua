@@ -2,10 +2,9 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.5.2
+-- @Version 0.5.3
 -- @Changelog
---   Fix ACS channel parameter reset to mono after enabling LFO
---   Update last-touched FX param name after MACRO is rename
+--   Improve assignation lists and overview sliders
 -- @Provides
 --   [main] VF - Flashmob.lua
 --   vf_FLASHMOB.jsfx
@@ -88,6 +87,8 @@ Full Changelog:
 	v0.5.2
 		+ Fix ACS channel parameter reset to mono after enabling LFO
 		+ Update last-touched FX param name after MACRO is rename
+	v0.5.3
+		+ Improve assignation lists and overview sliders
 
 
 ]]
@@ -1280,14 +1281,14 @@ function CustomSlider(label, valueA, valueB, min, max, width, height, default, m
 	
 	-- Draw center (grey)
 	if valueA_fill == 1 then
-		reaper.ImGui_DrawList_AddRectFilled(
-			draw_list,
-			indicator_center - indicator_width * 0.5,
-			y,
-			indicator_center + indicator_width * 0.5,
-			y + height,
-			center_color
-		)  
+		-- reaper.ImGui_DrawList_AddRectFilled(
+		-- 	draw_list,
+		-- 	indicator_center - indicator_width * 0.5,
+		-- 	y,
+		-- 	indicator_center + indicator_width * 0.5,
+		-- 	y + height,
+		-- 	center_color
+		-- )  
 	else
 		reaper.ImGui_DrawList_AddRectFilled(
 			draw_list,
@@ -1368,6 +1369,15 @@ function CustomSlider(label, valueA, valueB, min, max, width, height, default, m
 		if is_active then
 			-- Get the horizontal mouse delta (relative movement)
 			local dx, _ = reaper.ImGui_GetMouseDelta(ctx)
+
+			local mouse_x, mouse_y = reaper.ImGui_GetMousePos(ctx)
+
+			local mouse_outside = mouse_x < x or mouse_x > (x + width)
+			local at_limit = valueA == min or valueA == max
+
+			if at_limit and mouse_outside then
+				dx = 0
+			end					
 			
 			-- Check if Shift is held for fine-tuning
 			local sensitivity
@@ -1402,6 +1412,148 @@ function CustomSlider(label, valueA, valueB, min, max, width, height, default, m
 	return value_changed, valueA, valueB  
 end
 
+function OverviewSlider(label, valueA, min, max, width, height, default, color, formatted_val, bipolar)
+	local width = width or 100
+	local height = height or 12
+	if width < 1 then width = 1 end
+	if height < 1 then height = 1 end
+	if not bipolar then bipolar = 0 end
+
+	local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
+	
+	-- Calculate position
+	local x, y = reaper.ImGui_GetCursorScreenPos(ctx)
+	
+	-- Calculate normalized values
+	local range = max - min
+	local normalizedA = (valueA - min) / range
+	
+	-- Colors
+	local bg_color = DarkerColor(color, 1)
+
+	local frame_color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 1.0)
+	local center_color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 0.6)
+	local indicator_a_color = color
+	local indicator_b_color = reaper.ImGui_ColorConvertDouble4ToU32(0.8, 0.1, 0.1, 1.0)
+	local text_color = reaper.ImGui_ColorConvertDouble4ToU32(1.0, 1.0, 1.0, 1.0)
+	
+	-- Draw background
+	reaper.ImGui_DrawList_AddRectFilled(draw_list, x, y, x + width, y + height, bg_color)
+	
+	-- Draw indicator lines
+	local indicator_width = 1
+	-- local indicator_width_mod = 2
+	local indicator_a_x = x + (width * normalizedA)
+	local indicator_center = x + width * 0.5  
+	
+	-- Draw center (grey)
+	-- reaper.ImGui_DrawList_AddRectFilled(
+	-- 	draw_list,
+	-- 	indicator_center - indicator_width * 0.5,
+	-- 	y,
+	-- 	indicator_center + indicator_width * 0.5,
+	-- 	y + height,
+	-- 	center_color
+	-- )    
+
+	-- Draw range from 0 to valueA using a brighter color id valueA_fill == 1
+	local indicator_a_x = x + (width * 0.5) * bipolar
+	local indicator_b_x = x + (width * normalizedA)
+	local range_left = math.min(indicator_a_x, indicator_b_x)
+	local range_right = math.max(indicator_a_x, indicator_b_x)
+	-- Assuming BrighterColor increases brightness; adjust factor as needed (0.5 here)
+	-- local range_color = BrighterColor(color, 1)
+	local range_color = DarkerColor(color, 2)
+	reaper.ImGui_DrawList_AddRectFilled(draw_list, range_left, y, range_right, y + height, range_color)	
+
+	-- Draw indicator C
+	local indicator_c_x = x + ((width - 1) * normalizedA)
+	reaper.ImGui_DrawList_AddRectFilled(draw_list, indicator_c_x, y, indicator_c_x + indicator_width, y + height, indicator_a_color)
+	
+	-- Small UI tweak to align the interactive button with the slider
+	local x1, y1 = reaper.ImGui_GetCursorScreenPos(ctx)
+	reaper.ImGui_SetCursorScreenPos(ctx, x1, y1 + 1)
+ 
+	reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ItemSpacing(), 8, 2)
+	reaper.ImGui_InvisibleButton(ctx, label, width, height)
+	reaper.ImGui_PopStyleVar(ctx, 1)
+	
+	-- Handle mouse interaction for the blue indicator (valueA)
+	local is_hovered = reaper.ImGui_IsItemHovered(ctx)
+	local is_active = reaper.ImGui_IsItemActive(ctx)
+	local value_changed = false  
+
+	local text_w, text_h = reaper.ImGui_CalcTextSize(ctx, formatted_val)
+	reaper.ImGui_DrawList_AddText(draw_list, x + width * 0.5 - text_w * 0.5, y + 1, full_white, formatted_val)
+
+	if is_active then
+		-- Get the horizontal mouse delta (relative movement)
+		local dx, _ = reaper.ImGui_GetMouseDelta(ctx)
+
+		local mouse_x, mouse_y = reaper.ImGui_GetMousePos(ctx)
+
+		-- Print("mouse_x:")
+		-- Print(mouse_x)
+		-- Print("x:")
+		-- Print(x)
+		-- Print("x + width:")
+		-- Print(x + width)				
+		-- if (valueA == min or valueA == max) and (mouse_x < x or mouse_x > x + width) then
+		-- 	Print("ZERO")
+		-- 	dx = 0
+		-- else
+		-- 	dx = dx
+		-- end
+
+
+		-- Print("valueA:")
+		-- Print(valueA)
+		-- Print("min:")
+		-- Print(min)
+		local mouse_outside = mouse_x < x or mouse_x > (x + width)
+		local at_limit = valueA == min or valueA == max
+
+		if at_limit and mouse_outside then
+			dx = 0
+		end		
+
+		-- if mouse_x >= x and mouse_x <= x + width then
+		-- 	dx = dx
+		-- else
+		-- 	dx = 0
+		-- end
+		
+		-- Check if Shift is held for fine-tuning
+		local sensitivity
+		if reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Shift()) then
+			sensitivity = 0.1
+		else
+			sensitivity = 1
+		end
+		
+		-- Calculate new value increment based on relative mouse movement
+		local delta_value = dx * (sensitivity * range / width)
+		local new_value_a = valueA + delta_value
+		
+		-- Clamp value between min and max
+		if new_value_a < min then new_value_a = min end
+		if new_value_a > max then new_value_a = max end
+
+		if valueA ~= new_value_a then
+			valueA = new_value_a
+			-- value_changed = true
+		end
+		value_changed = true
+	end
+
+	-- Reset to default on double-click
+	if is_hovered and reaper.ImGui_IsMouseDoubleClicked(ctx, reaper.ImGui_MouseButton_Left()) then
+		valueA = default
+		value_changed = true
+	end
+	
+	return value_changed, valueA  
+end
 
 function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed, param_is_linked_to_anything)
 	local str_index = tostring(index)
@@ -1435,7 +1587,8 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 		if #t_assignations == 0 then
 			_G["modChild_height" .. index] = 76 + 28
 		else
-			_G["modChild_height" .. index] = 76 + 12 + 40 * #t_assignations
+			-- _G["modChild_height" .. index] = 76 + 12 + 40 * #t_assignations
+			_G["modChild_height" .. index] = 76 + 12 + 37 * #t_assignations
 		end
 	elseif _G["modList" .. index] == 0 then
 		_G["modChild_height" .. index] = 76
@@ -1733,7 +1886,8 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 						offset_formatted = ReplaceRareUnicode(offset_formatted)							
 					end
 
-					offset_formatted = offset_formatted:gsub("%%", "%%%%")
+					-- offset_formatted = offset_formatted:gsub("%%", "%%%%")
+					offset_formatted = offset_formatted:gsub("%%", "%%")
 
 					-- Special case of plugins not supporting the Cockos VST extension (hard-coded)
 					if t_assignations[i].fx_name_raw:find("Valhalla DSP") then
@@ -1741,10 +1895,17 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 						offset_formatted = baseline_rounded
 					end
 
+					offset = tonumber(offset)
 
-					reaper.ImGui_SetNextItemWidth(ctx, popup_width * 0.5 - (win_padding_x * 2))
-					local rv_offset, offset = reaper.ImGui_SliderDouble(ctx, "##offset" .. i, offset, min, max, offset_formatted)
-					-- local rv_offset, offset = reaper.ImGui_SliderDouble(ctx, "##offset" .. i, offset, min, max)
+					-- reaper.ImGui_SetNextItemWidth(ctx, popup_width * 0.5 - (win_padding_x * 2))
+					-- local rv_offset, offset = reaper.ImGui_SliderDouble(ctx, "##offset" .. i, offset, min, max, offset_formatted)
+
+					local mod_assign_col = t_color_palette[index]
+					local hover_x, hover_y = reaper.ImGui_GetCursorScreenPos(ctx)
+					if reaper.ImGui_IsMouseHoveringRect(ctx, hover_x, hover_y + 3, hover_x + popup_width * 0.5 - (win_padding_x * 2), hover_y + 3 + 16) then
+						mod_assign_col = BrighterColor2(mod_assign_col, 0.3)
+					end
+					rv_offset, offset = OverviewSlider("##offset" .. i, offset, min, max, popup_width * 0.5 - (win_padding_x * 2), 16, 0.5, mod_assign_col, offset_formatted)
 					if rv_offset then
 
 						-- active as last-touched FX param
@@ -1762,10 +1923,20 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 					reaper.ImGui_SameLine(ctx)
 
 					local _, amount = reaper.TrackFX_GetNamedConfigParm(track, t_assignations[i].fx_id, "param." .. t_assignations[i].param_id .. ".plink.scale")
-					local amount_formatted = string.format('%.1f %%%%', amount * 100)
+					-- local amount_formatted = string.format('%.1f %%%%', amount * 100)
+					local amount_formatted = string.format('%.1f %%', amount * 100)
 
-					reaper.ImGui_SetNextItemWidth(ctx, popup_width * 0.5 - (win_padding_x * 2))
-					local rv_amount, amount = reaper.ImGui_SliderDouble(ctx, "##amount" .. i, amount, -1, 1, amount_formatted)
+					amount = tonumber(amount)
+
+					-- reaper.ImGui_SetNextItemWidth(ctx, popup_width * 0.5 - (win_padding_x * 2))
+					-- local rv_amount, amount = reaper.ImGui_SliderDouble(ctx, "##amount" .. i, amount, -1, 1, amount_formatted)
+
+					local mod_assign_col = t_color_palette[index]
+					local hover_x, hover_y = reaper.ImGui_GetCursorScreenPos(ctx)
+					if reaper.ImGui_IsMouseHoveringRect(ctx, hover_x, hover_y + 3, hover_x + popup_width * 0.5 - (win_padding_x * 2), hover_y + 3 + 16) then
+						mod_assign_col = BrighterColor2(mod_assign_col, 0.3)
+					end
+					rv_amount, amount = OverviewSlider("##amount" .. i, amount, -1, 1, popup_width * 0.5 - (win_padding_x * 2), 16, 0, mod_assign_col, amount_formatted)
 					if rv_amount then
 
 						show_mod_value = true
@@ -1868,7 +2039,8 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 		if #t_assignations == 0 then
 			_G["macroChild_height" .. index] = 40 + win_padding_y * 2 + 28
 		else
-			_G["macroChild_height" .. index] = 40 + win_padding_y * 2 + 18 + 39 * #t_assignations
+			-- _G["macroChild_height" .. index] = 40 + win_padding_y * 2 + 40 * #t_assignations
+			_G["macroChild_height" .. index] = 40 + win_padding_y * 2 + 10 + 37 * #t_assignations
 		end
 	elseif _G["macroList" .. index] == 0 then
 		_G["macroChild_height" .. index] = 40 + win_padding_y * 2
@@ -2291,7 +2463,8 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 						offset_formatted = ReplaceRareUnicode(offset_formatted)	
 					end
 
-					offset_formatted = offset_formatted:gsub("%%", "%%%%") -- Escape "%"					
+					-- offset_formatted = offset_formatted:gsub("%%", "%%%%") -- Escape "%"					
+					offset_formatted = offset_formatted:gsub("%%", "%%") -- Escape "%"
 
 					-- Special case of plugins not supporting the Cockos VST extension (hard-coded)
 					if t_assignations[i].fx_name_raw:find("Valhalla DSP") then
@@ -2299,10 +2472,18 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 						offset_formatted = baseline_rounded
 					end
 
+					offset = tonumber(offset)
 
-					reaper.ImGui_SetNextItemWidth(ctx, popup_width * 0.5 - (win_padding_x * 2))
-					local rv_offset, offset = reaper.ImGui_SliderDouble(ctx, "##offset" .. i, offset, min, max, offset_formatted)
-					-- local rv_offset, offset = reaper.ImGui_SliderDouble(ctx, "##offset" .. i, offset, min, max)
+					-- reaper.ImGui_SetNextItemWidth(ctx, popup_width * 0.5 - (win_padding_x * 2))
+					-- local rv_offset, offset = reaper.ImGui_SliderDouble(ctx, "##offset" .. i, offset, min, max, offset_formatted)
+
+					local mod_assign_col = t_color_palette[mod_container_table_id]
+					local hover_x, hover_y = reaper.ImGui_GetCursorScreenPos(ctx)
+					if reaper.ImGui_IsMouseHoveringRect(ctx, hover_x, hover_y + 3, hover_x + popup_width * 0.5 - (win_padding_x * 2), hover_y + 3 + 16) then
+						mod_assign_col = BrighterColor2(mod_assign_col, 0.3)
+					end
+					rv_offset, offset = OverviewSlider("##offset" .. i, offset, min, max, popup_width * 0.5 - (win_padding_x * 2), 16, 0.5, mod_assign_col, offset_formatted)
+
 					if rv_offset then
 
 						-- active as last-touched FX param
@@ -2320,10 +2501,20 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 					reaper.ImGui_SameLine(ctx)
 
 					local _, amount = reaper.TrackFX_GetNamedConfigParm(track, t_assignations[i].fx_id, "param." .. t_assignations[i].param_id .. ".plink.scale")
-					local amount_formatted = string.format('%.1f %%%%', amount * 100)
+					-- local amount_formatted = string.format('%.1f %%%%', amount * 100)
+					local amount_formatted = string.format('%.1f %%', amount * 100)
 
-					reaper.ImGui_SetNextItemWidth(ctx, popup_width * 0.5 - (win_padding_x * 2))
-					local rv_amount, amount = reaper.ImGui_SliderDouble(ctx, "##amount" .. i, amount, -1, 1, amount_formatted)
+					amount = tonumber(amount)
+
+					-- reaper.ImGui_SetNextItemWidth(ctx, popup_width * 0.5 - (win_padding_x * 2))
+					-- local rv_amount, amount = reaper.ImGui_SliderDouble(ctx, "##amount" .. i, amount, -1, 1, amount_formatted)
+
+					local mod_assign_col = t_color_palette[mod_container_table_id]
+					local hover_x, hover_y = reaper.ImGui_GetCursorScreenPos(ctx)
+					if reaper.ImGui_IsMouseHoveringRect(ctx, hover_x, hover_y + 3, hover_x + popup_width * 0.5 - (win_padding_x * 2), hover_y + 3 + 16) then
+						mod_assign_col = BrighterColor2(mod_assign_col, 0.3)
+					end
+					rv_amount, amount = OverviewSlider("##amount" .. i, amount, -1, 1, popup_width * 0.5 - (win_padding_x * 2), 16, 0, mod_assign_col, amount_formatted)
 					if rv_amount then
 
 						show_mod_value = true
@@ -3717,7 +3908,8 @@ function Init()
 	UI_color = -1499027713 -- Grey
 	white = reaper.ImGui_ColorConvertDouble4ToU32(0.8, 0.8, 0.8, 1)
 	full_white = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 1)	
-	grey = reaper.ImGui_ColorConvertDouble4ToU32(0.2, 0.2, 0.2, 0.8)	
+	grey = reaper.ImGui_ColorConvertDouble4ToU32(0.2, 0.2, 0.2, 0.8)
+	overview_default_color = reaper.ImGui_ColorConvertDouble4ToU32(0.8, 0.6, 0.6, 0.9) -- Light brown
 	opened_tab = 1
 	last_opened_tab = nil
 	last_header_param = nil
@@ -4707,7 +4899,6 @@ function Frame()
 												reaper.ImGui_TextColored(ctx, mod_amount_value_color, string.format('%.1f %%', t_pm_data.link_scale*100))
 											end	
 										end
-
 										rv_link_scale, t_pm_data.link_scale = CustomSlider("Amount", t_pm_data.link_scale, 0, -1, 1, custom_widget_width, 13, 0, false, t_pm_data.link_active, 0, mod_slider_color, 1)
 										if rv_link_scale then
 											reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.scale", t_pm_data.link_scale)
@@ -4912,16 +5103,15 @@ function Frame()
 
 									-- compute exact height for this group
 									local n = counts[item.fx_id]
-									local n_mod = counts_line[item.fx_id]
-																	
-									local line_h = reaper.ImGui_GetFrameHeight(ctx) + 8
-									local line_mod_h = reaper.ImGui_GetFrameHeight(ctx) + 1
-									local height = 34 + (line_h * n) + (line_mod_h * n_mod)
+									local n_mod = counts_line[item.fx_id]																
+
+									local line_h = reaper.ImGui_GetFrameHeight(ctx) + 6
+									local line_mod_h = reaper.ImGui_GetFrameHeight(ctx) - 1
+									local height = 35 + (line_h * n) + (line_mod_h * n_mod)
 
 									child_open = reaper.ImGui_BeginChild(ctx, item.fx_id, avail, height, reaper.ImGui_ChildFlags_Border(), reaper.ImGui_ChildFlags_AutoResizeY())
 								end
 
-							-- for _, item in ipairs(t_overview) do
 								if child_open then
 
 									reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FramePadding(), 4, 2)
@@ -4970,7 +5160,7 @@ function Frame()
 									end
 
 									if track_color == UI_color then
-										overview_color = DarkerColor2(full_white, 0.2)
+										overview_color = overview_default_color
 										-- slider_color = full_white
 									else
 										overview_color = DarkerColor2(track_color, 0.1)
@@ -4984,7 +5174,7 @@ function Frame()
 									if reaper.ImGui_IsItemHovered(ctx) then
 										-- overview_color = full_white
 										if track_color == UI_color then
-											overview_color = full_white
+											overview_color = BrighterColor2(overview_default_color, 0.3)
 										else
 											overview_color = BrighterColor2(track_color, 0.3)
 										end
@@ -4997,7 +5187,8 @@ function Frame()
 									end	
 
 									-- Open native parameter modulation window
-									if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Right()) then
+									-- if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Right()) then
+									if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseReleased(ctx, reaper.ImGui_MouseButton_Right()) then
 										local current_val = reaper.TrackFX_GetParam(track, item.fx_id, item.param_id)
 										reaper.TrackFX_SetParam(track, item.fx_id, item.param_id, current_val) -- To set as last touched param										
 										local _, visible = reaper.TrackFX_GetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".mod.visible")
@@ -5053,7 +5244,7 @@ function Frame()
 									local param_name_clipped = ClipText(item.param_name, width_for_paramName)
 									reaper.ImGui_TextColored(ctx, overview_color, param_name_clipped)
 									if param_name_clipped ~= item.param_name then ToolTip(item.param_name) end									
-									ToolTip("Alt-click: Delete all associated modulations")									
+									ToolTip("Left-click: Set as last-touched FX parameter\nRight-click: Open/close parameter modulation window\nAlt-click: Delete all associated modulations")									
 
 									-- Show baseline and mod amount sliders
 									reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 0)
@@ -5075,11 +5266,13 @@ function Frame()
 										-- last_touched_param_value = (last_touched_param_value / max) - min -- Useful for JSFX with parameter value range > 1
 										offset_formatted = offset
 										offset_formatted = string.format("%.2f", offset_formatted)
-										offset_formatted = offset_formatted:gsub("%%", "%%%%")						
+										-- offset_formatted = offset_formatted:gsub("%%", "%%%%")
+										offset_formatted = offset_formatted:gsub("%%", "%%")						
 									else
 										rv, offset_formatted = reaper.TrackFX_FormatParamValueNormalized(track, item.fx_id, item.param_id, offset, "")												
 										offset_formatted = ReplaceRareUnicode(offset_formatted)	
-										offset_formatted = offset_formatted:gsub("%%", "%%%%")							
+										-- offset_formatted = offset_formatted:gsub("%%", "%%%%")							
+										offset_formatted = offset_formatted:gsub("%%", "%%")
 									end
 
 									-- Special case of plugins not supporting the Cockos VST extension (hard-coded)
@@ -5087,6 +5280,8 @@ function Frame()
 										local baseline_rounded = string.format("%.2f", offset)
 										offset_formatted = baseline_rounded
 									end
+
+									offset = tonumber(offset)
 
 									reaper.ImGui_SameLine(ctx)
 
@@ -5098,8 +5293,18 @@ function Frame()
 
 									-- reaper.ImGui_SetCursorPosX(ctx, avail * 0.5 - 4)
 									reaper.ImGui_SetCursorPos(ctx, avail * 0.5 - 4, y - 2)
-									reaper.ImGui_SetNextItemWidth(ctx, avail * 0.5 - win_padding_x - 4)
-									local rv_offset, offset = reaper.ImGui_SliderDouble(ctx, "##offset" .. item.param_id, offset, min, max, offset_formatted)
+
+									local hover_x, hover_y = reaper.ImGui_GetCursorScreenPos(ctx)
+									if reaper.ImGui_IsMouseHoveringRect(ctx, hover_x, hover_y + 3, hover_x + avail * 0.5 - win_padding_x - 4, hover_y + 3 + 16) then
+										if track_color == UI_color then
+											overview_color = BrighterColor2(overview_default_color, 0.3)
+										else
+											overview_color = BrighterColor2(track_color, 0.3)
+										end
+									end
+									-- reaper.ImGui_SetNextItemWidth(ctx, avail * 0.5 - win_padding_x - 4)
+									-- local rv_offset, offset = reaper.ImGui_SliderDouble(ctx, "##offset" .. item.param_id, offset, min, max, offset_formatted)
+									rv_offset, offset = OverviewSlider("##offset" .. item.param_id, offset, min, max, avail * 0.5 - win_padding_x - 4, 16, 0.5, overview_color, offset_formatted)
 									if rv_offset then
 
 										overview_baseline = true -- show mod range on baseline slider while adjusting offset slider										
@@ -5116,7 +5321,7 @@ function Frame()
 									end																												
 
 									reaper.ImGui_PopStyleVar(ctx, 1)
-									reaper.ImGui_PopStyleColor(ctx, 4)	
+									reaper.ImGui_PopStyleColor(ctx, 4)										
 
 									-- Draw MOD or MACRO slider
 									local rv_amount
@@ -5188,12 +5393,22 @@ function Frame()
 										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrabActive(), DarkerColor2(slider_color, 0.4))
 										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), DarkerColor2(slider_color, 0.4))																								
 
-										reaper.ImGui_SetCursorPos(ctx, avail * 0.5 - 4, y - 1)
 										local _, amount = reaper.TrackFX_GetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".plink.scale")
-										local amount_formatted = string.format('%.1f %%%%', amount * 100)
+										-- local amount_formatted = string.format('%.1f %%%%', amount * 100)
+										local amount_formatted = string.format('%.1f %%', amount * 100)
+										amount = tonumber(amount)
 
-										reaper.ImGui_SetNextItemWidth(ctx, avail * 0.5 - win_padding_x - 4)
-										rv_amount, amount = reaper.ImGui_SliderDouble(ctx, "##amount" .. item.param_id, amount, -1, 1, amount_formatted)
+										reaper.ImGui_SetCursorPos(ctx, avail * 0.5 - 4, y - 1)										
+
+										local amount_color = UI_color
+										local hover_x, hover_y = reaper.ImGui_GetCursorScreenPos(ctx)
+										if reaper.ImGui_IsMouseHoveringRect(ctx, hover_x, hover_y + 3, hover_x + avail * 0.5 - win_padding_x - 4, hover_y + 3 + 16) then
+											amount_color = full_white
+										end										
+
+										-- reaper.ImGui_SetNextItemWidth(ctx, avail * 0.5 - win_padding_x - 4)
+										-- rv_amount, amount = reaper.ImGui_SliderDouble(ctx, "##amount" .. item.param_id, amount, -1, 1, amount_formatted)
+										rv_amount, amount = OverviewSlider("##amount" .. item.param_id, amount, -1, 1, avail * 0.5 - win_padding_x - 4, 16, 0, amount_color, amount_formatted, 1)
 										if rv_amount then
 
 											show_mod_value = true
@@ -5204,6 +5419,7 @@ function Frame()
 											reaper.TrackFX_SetParam(track, item.fx_id, item.param_id, val)
 
 											reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".plink.scale", amount)
+											-- reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".plink.scale", amount)
 										end										
 										reaper.ImGui_PopStyleColor(ctx, 3)	
 									end	
@@ -5228,13 +5444,23 @@ function Frame()
 										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrabActive(), DarkerColor2(slider_color, 0.4))
 										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), DarkerColor2(slider_color, 0.4))																									
 
-										reaper.ImGui_SetCursorPos(ctx, avail * 0.5 - 4, y - 1)
 										local _, lfo_strength = reaper.TrackFX_GetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".lfo.strength")
 										-- lfo_strength = tonumber(lfo_strength)
-										local lfo_strength_formatted = string.format('%.1f %%%%', lfo_strength * 100)
+										-- local lfo_strength_formatted = string.format('%.1f %%%%', lfo_strength * 100)
+										local lfo_strength_formatted = string.format('%.1f %%', lfo_strength * 100)
+										lfo_strength = tonumber(lfo_strength)
 
-										reaper.ImGui_SetNextItemWidth(ctx, avail * 0.5 - win_padding_x - 4)
-										rv_lfo_strength, lfo_strength = reaper.ImGui_SliderDouble(ctx, "##lfo_strength" .. item.param_id, lfo_strength, 0, 1, lfo_strength_formatted)
+										reaper.ImGui_SetCursorPos(ctx, avail * 0.5 - 4, y - 1)
+
+										local amount_color = UI_color
+										local hover_x, hover_y = reaper.ImGui_GetCursorScreenPos(ctx)
+										if reaper.ImGui_IsMouseHoveringRect(ctx, hover_x, hover_y + 3, hover_x + avail * 0.5 - win_padding_x - 4, hover_y + 3 + 16) then
+											amount_color = full_white
+										end																				
+
+										-- reaper.ImGui_SetNextItemWidth(ctx, avail * 0.5 - win_padding_x - 4)
+										-- rv_lfo_strength, lfo_strength = reaper.ImGui_SliderDouble(ctx, "##lfo_strength" .. item.param_id, lfo_strength, 0, 1, lfo_strength_formatted)
+										rv_lfo_strength, lfo_strength = OverviewSlider("##lfo_strength" .. item.param_id, lfo_strength, 0, 1, avail * 0.5 - win_padding_x - 4, 16, 0.5, amount_color, lfo_strength_formatted)
 										if rv_lfo_strength then
 
 											lfo_strength_adjust = 1
@@ -5247,8 +5473,10 @@ function Frame()
 										end	
 
 										-- Show mod range on LAST FX PARAM baseline slider
-										if reaper.ImGui_IsItemHovered(ctx, reaper.ImGui_HoveredFlags_RectOnly()) then
-											hover_lfo = 1
+										if reaper.ImGui_IsItemHovered(ctx, reaper.ImGui_HoveredFlags_RectOnly()) or reaper.ImGui_IsItemActive(ctx) then
+											if t_last_param.fx == item.fx_id and t_last_param.param == item.param_id then -- if hovered slider is same as last-touched FX param
+												hover_lfo = 1
+											end
 										end																											
 
 										reaper.ImGui_PopStyleColor(ctx, 3)	
@@ -5274,13 +5502,21 @@ function Frame()
 										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_SliderGrabActive(), DarkerColor2(slider_color, 0.4))
 										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), DarkerColor2(slider_color, 0.4))																									
 
-										reaper.ImGui_SetCursorPos(ctx, avail * 0.5 - 4, y - 1)
 										local _, acs_strength = reaper.TrackFX_GetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".acs.strength")
 										-- acs_strength = tonumber(acs_strength)
-										local acs_strength_formatted = string.format('%.1f %%%%', acs_strength * 100)
+										local acs_strength_formatted = string.format('%.1f %%', acs_strength * 100)
+										acs_strength = tonumber(acs_strength)
 
-										reaper.ImGui_SetNextItemWidth(ctx, avail * 0.5 - win_padding_x - 4)
-										rv_acs_strength, acs_strength = reaper.ImGui_SliderDouble(ctx, "##acs_strength" .. item.param_id, acs_strength, 0, 1, acs_strength_formatted)
+										reaper.ImGui_SetCursorPos(ctx, avail * 0.5 - 4, y - 1)										
+
+										local amount_color = UI_color
+										local hover_x, hover_y = reaper.ImGui_GetCursorScreenPos(ctx)
+										if reaper.ImGui_IsMouseHoveringRect(ctx, hover_x, hover_y + 3, hover_x + avail * 0.5 - win_padding_x - 4, hover_y + 3 + 16) then
+											amount_color = full_white
+										end										
+										-- reaper.ImGui_SetNextItemWidth(ctx, avail * 0.5 - win_padding_x - 4)
+										-- rv_acs_strength, acs_strength = reaper.ImGui_SliderDouble(ctx, "##acs_strength" .. item.param_id, acs_strength, 0, 1, acs_strength_formatted)
+										rv_acs_strength, acs_strength = OverviewSlider("##acs_strength" .. item.param_id, acs_strength, 0, 1, avail * 0.5 - win_padding_x - 4, 16, 0.5, amount_color, acs_strength_formatted)
 										if rv_acs_strength then
 
 											acs_strength_adjust = 1
@@ -5292,8 +5528,10 @@ function Frame()
 											reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".acs.strength", acs_strength)
 										end	
 
-										if reaper.ImGui_IsItemHovered(ctx, reaper.ImGui_HoveredFlags_RectOnly()) then
-											hover_acs = 1
+										if reaper.ImGui_IsItemHovered(ctx, reaper.ImGui_HoveredFlags_RectOnly()) or reaper.ImGui_IsItemActive(ctx) then
+											if t_last_param.fx == item.fx_id and t_last_param.param == item.param_id then -- if hovered slider is same as last-touched FX param
+												hover_acs = 1
+											end
 										end										
 
 										reaper.ImGui_PopStyleColor(ctx, 3)	
@@ -5346,7 +5584,14 @@ function Frame()
 									-- Update data
 									if rv_offset or rv_amount or rv_lfo_strength or rv_acs_strength then
 										GetLastTouchedFXParam(track)
-										GetPMData(track, item.fx_id, item.param_id)
+										-- GetPMData(track, item.fx_id, item.param_id)
+										GetPMData(track, t_last_param.fx, t_last_param.param)
+										if rv_lfo_strength then
+											GetNativeLFOData(track, t_last_param.fx, t_last_param.param)
+										end
+										if rv_acs_strength then
+											GetNativeACSData(track, t_last_param.fx, t_last_param.param)
+										end										
 									end					
 
 									reaper.ImGui_PopStyleVar(ctx, 2)
