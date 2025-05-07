@@ -2,10 +2,10 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.5
+-- @Version 0.5.1
 -- @Changelog
---   Add assignation lists in MOD and MACRO tabs
---   Add a powerful OVERVIEW page to see all the modulated parameters on the selected track (magnifying glass icon)
+--   Allow user to enable and manage native modulations via Flashmob even if no Flashmob FX is present on track
+--   Add visual feedback for used MODS and used MACROS (colored scope lines and colored macro names)
 -- @Provides
 --   [main] VF - Flashmob.lua
 --   vf_FLASHMOB.jsfx
@@ -82,6 +82,9 @@ Full Changelog:
 	v0.5
 		+ Add assignation lists in MOD and MACRO tabs
 		+ Add a powerful OVERVIEW page to see all the modulated parameters on the selected track (magnifying glass icon)
+	v0.5.1
+		+ Allow user to enable and manage native modulations via Flashmob even if no Flashmob FX is present on track
+		+ Add visual feedback for used MODS and used MACROS (colored scope lines and colored macro names)	
 
 
 ]]
@@ -190,7 +193,7 @@ end
 function Darken(val, inc)
 	if not inc then inc = 0.3 end
 	val = val - inc
-	if val < 0 then val = 0 end
+	if val < 0.1 then val = 0.1 end
 	return val
 end
 
@@ -323,9 +326,8 @@ function CheckIfStoredInstanceExist(track, target_fx_name, index)
 end
 
 function GetLastTouchedFXParam(track)
-	local result
-	local store_previous_param
-	local rv, track_id, itemidx, takeidx, fx, param = reaper.GetTouchedOrFocusedFX(0) -- Get last touched FX parameter		
+	local result, store_previous_param, new_param_guid_hack
+	local rv, track_id, itemidx, takeidx, fx, param = reaper.GetTouchedOrFocusedFX(0) -- Get last touched FX parameter	
 	if rv == false then
 		result = -1 -- INVALID: No parameter
 	else
@@ -345,7 +347,7 @@ function GetLastTouchedFXParam(track)
 
 				else -- If last touched fx param is on selected track (support master track)
 					if itemidx == -1 and fx < 16777216 then -- If not take FX nor input FX...
-						local new_param_guid_hack = ((track_id+4)*-66) * (fx+13) * ((param+39)*-73) + track_id -- Pseudo random gen number to check if last touched param changed (quicker than using the FX GUID)	
+						new_param_guid_hack = ((track_id+4)*-66) * (fx+13) * ((param+39)*-73) + track_id -- Pseudo random gen number to check if last touched param changed (quicker than using the FX GUID)	
 
 						-- Check if last-touched FX param is a Flashmob parameter
 						local flashmob_inst
@@ -354,12 +356,16 @@ function GetLastTouchedFXParam(track)
 								flashmob_inst = true
 								break
 							end
-						end
+						end						
 
+						-- Print("new_param_guid_hack:")
+						-- Print(new_param_guid_hack)
+						-- Print("last_param_guid_hack:")
+						-- Print(last_param_guid_hack)						
 						if new_param_guid_hack ~= last_param_guid_hack then
 							-- Bingo, a new parameter have been detected							
 
-							if flashmob_inst and param < 7 and macro_mod_enable == 0 then -- If last-touched FX param is a macro of any Flashmob on the track
+							if flashmob_inst and param <= 7 and macro_mod_enable == 0 then -- If last-touched FX param is a macro of any Flashmob on the track
 								if t_last_param.param then
 									-- Set previous last-touched FX param as the current last-touched FX param
 									local previous_param_val = reaper.TrackFX_GetParam(track, t_last_param.fx, t_last_param.param)
@@ -373,9 +379,9 @@ function GetLastTouchedFXParam(track)
 								-- Check if previous touched FX param is a macro of any Flashmob of the track
 								if t_last_param.param then
 									local previous_param_is_any_macro
-									for i=1, #t_flashmob_id do
-										if t_last_param.fx == t_flashmob_id[i] then
-											if t_last_param.param < 7 then
+									for i=1, #t_flashmob_id do										
+										if t_last_param.fx == t_flashmob_id[i] then																		
+											if t_last_param.param <= 7 then
 												previous_param_is_any_macro = true
 												break
 											end
@@ -383,7 +389,7 @@ function GetLastTouchedFXParam(track)
 									end
 
 									-- If previous touched param wasn't a MACRO, store it to recall it when disabling "modulation mapping of macro"
-									if macro_mod_enable == 1 and fx == mod_container_id and param < 7 and previous_param_is_any_macro == nil then
+									if rv_flashmob == true and macro_mod_enable == 1 and fx == mod_container_id and param <= 7 and previous_param_is_any_macro == nil then
 										store_previous_param = true
 									end
 								end
@@ -399,7 +405,7 @@ function GetLastTouchedFXParam(track)
 		end
 	end
 
-	if result < 0 then		
+	if result < 0 then	
 		t_last_param = {}
 		t_previous_param = {}
 		t_pm_data = {}
@@ -623,6 +629,8 @@ function LinkParam(track, touched_fx, fx, touched_param, param, new_baseline, pa
 
 	-- if param_lock == 1 then
 		GetPMData(track, touched_fx, touched_param)
+		CheckIfModIsUsed(track, mod_container_id) -- To set plotline color
+		CheckIfMacroIsUsed(track, mod_container_id) -- To set macro slider color
 	-- end
 end
 
@@ -645,6 +653,8 @@ function UnlinkParam(track, touched_fx, touched_param)
 			RemoveTrackControl(track, touched_fx, touched_param)
 		end
 	end
+	CheckIfModIsUsed(track, mod_container_id) -- To set plotline color
+	CheckIfMacroIsUsed(track, mod_container_id) -- To set macro slider color
 end
 
 function ShowInTrackControl(track, fx, param)
@@ -899,11 +909,18 @@ end
 function AddFlashmobInstance(track, first_slot)
 	local openFloating_setting = reaper.SNM_GetIntConfigVar("fxfloat_focus", -666) -- Save the original user setting to open or not floating window when adding new FX
 	reaper.SNM_SetIntConfigVar("fxfloat_focus", openFloating_setting&(~4)) -- Temporarly disable the user setting
+
+	mod_container_id = reaper.TrackFX_GetCount(track)
+
 	reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts Beta/Flashmob/FXChains/" .. default_preset  .. ".RfxChain", false, 1024)	-- last argument adds an instance if one is not found at the first FX chain index				
 	if first_slot and first_slot == 1 then
 		reaper.TrackFX_CopyToTrack(track, reaper.TrackFX_GetCount(track)-1, track, 0, 1) -- Move Flashmob to the first FX chain slot
+		mod_container_id = 0
 	end
 	reaper.SNM_SetIntConfigVar("fxfloat_focus", openFloating_setting) -- Restore user setting						
+
+	CheckIfModIsUsed(track, mod_container_id)
+	CheckIfMacroIsUsed(track, mod_container_id)
 end	
 
 function OpenSnapheap(track, fx, index)
@@ -967,6 +984,62 @@ function GetOverview(track)
 		end
 	end
 	return t_overview
+end
+
+function CheckIfModIsUsed(track, fx)
+	modUsed = {modUsed1 = nil, modUsed2 = nil, modUsed3 = nil, modUsed4 = nil, modUsed5 = nil, modUsed6 = nil}
+	local total_fx = reaper.TrackFX_GetCount(track)	
+	for i=0, total_fx -1 do
+		-- t_overview[#t_overview+1] = {fx_id = i, fx_name = fx_name}
+		for j=0, reaper.TrackFX_GetNumParams(track, i) -1 do
+			local _, mod_active = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".mod.active") 			
+			local _, link_active = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".plink.active") 	
+			if mod_active == "1" and link_active == "1" then
+
+				local _, link_source_fx = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".plink.effect") 
+				local _, link_source_param = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".plink.param")
+				link_source_fx = tonumber(link_source_fx)
+				link_source_param = tonumber(link_source_param)
+
+				if link_source_fx == fx and link_source_param > 7 then
+					for h=1, 6 do
+						if link_source_param == 7 + h then
+							modUsed["modUsed" .. tostring(h)] = true
+							break
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+function CheckIfMacroIsUsed(track, fx)
+	macroUsed = {macroUsed1 = nil, macroUsed2 = nil, macroUsed3 = nil, macroUsed4 = nil, macroUsed5 = nil, macroUsed6 = nil}
+	local total_fx = reaper.TrackFX_GetCount(track)	
+	for i=0, total_fx -1 do
+		-- t_overview[#t_overview+1] = {fx_id = i, fx_name = fx_name}
+		for j=0, reaper.TrackFX_GetNumParams(track, i) -1 do
+			local _, mod_active = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".mod.active") 			
+			local _, link_active = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".plink.active") 	
+			if mod_active == "1" and link_active == "1" then
+
+				local _, link_source_fx = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".plink.effect") 
+				local _, link_source_param = reaper.TrackFX_GetNamedConfigParm(track, i, "param." .. j .. ".plink.param")
+				link_source_fx = tonumber(link_source_fx)
+				link_source_param = tonumber(link_source_param)
+
+				if link_source_fx == fx and link_source_param < 8 then
+					for h=0, 7 do
+						if link_source_param == h then
+							macroUsed["macroUsed" .. tostring(h+1)] = true
+							break
+						end
+					end
+				end
+			end
+		end
+	end
 end
 
 ------------------------------------------------------------------------------------
@@ -1490,6 +1563,19 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 		-- _G["plots" .. str_index].data[_G["plots" .. str_index].offset] = mod_val
 		-- _G["plots" .. str_index].offset = (_G["plots" .. str_index].offset % PLOT_SIZE) + 1				
 
+		-- local mod_used
+		-- if slower_defer_update then
+		-- 	mod_used = CheckIfModIsUsed(track, mod_container_id, index + 7)
+		-- end
+
+		if modUsed["modUsed" .. str_index] then
+			reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_PlotLines(), BrighterColor(t_color_palette[index]))
+		else
+			reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_PlotLines(), UI_color)
+		end
+
+		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_PlotLinesHovered(), UI_color) -- Disable plot line hovering default red color
+
 		local x, y = reaper.ImGui_GetCursorPos(ctx)
 		local width, height = reaper.ImGui_GetWindowSize(ctx) 
 		reaper.ImGui_SetNextItemWidth(ctx, width - x - win_padding_x)
@@ -1498,6 +1584,8 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 		data_str = string.format("%.2f", data_str)
 		ToolTipPlotLines(data_str) -- Override the default plotlines tooltip (that have a instantaneous hard-coded tooltip)
 		ToolTip("Left-click: Open/close Snapheap\nRight-click: Show assignations")
+
+		reaper.ImGui_PopStyleColor(ctx, 2)
 
 		-- Open Snap Heap
 		if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
@@ -1761,9 +1849,16 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 
 
 	reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Border(), mod_border_color)
-	reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Button(), DarkerColor(t_color_palette[mod_container_table_id], 3))
-	reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonActive(), DarkerColor(t_color_palette[mod_container_table_id]))
-	reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonHovered(), t_color_palette[mod_container_table_id])
+
+	if macroUsed["macroUsed" .. str_index] then
+		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Button(), DarkerColor2(t_color_palette[mod_container_table_id], 0.4))
+		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonActive(), DarkerColor2(t_color_palette[mod_container_table_id], 0.3))
+		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonHovered(), t_color_palette[mod_container_table_id])		
+	else
+		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Button(), DarkerColor2(UI_color, 0.4))
+		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonActive(), DarkerColor2(UI_color, 0.4))
+		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonHovered(), UI_color)		
+	end	
 
 	if not _G["macroChild_height" .. index] then _G["macroChild_height" .. index] = 40 + win_padding_y * 2 end
 	if _G["macroList" .. index] == 1 and slower_defer_update then 
@@ -2039,14 +2134,15 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 			_G["macro_baseline" .. str_index] = baseline
 			_G["macro" .. str_index] = macro_val
 			-- _G["rv_macro" .. str_index], _G["macro_baseline" .. str_index], _G["macro" .. str_index] = CustomSlider("##" .. macro_name, _G["macro_baseline" .. str_index], _G["macro" .. str_index], min, max, width - x - win_padding_x, 13, 50, true, 1, view_mod_range_slider, BrighterColor(UI_color, 1))
-			_G["rv_macro" .. str_index], _G["macro_baseline" .. str_index], _G["macro" .. str_index] = CustomSlider("##" .. macro_name, _G["macro_baseline" .. str_index], _G["macro" .. str_index], min, max, width - x - win_padding_x, 13, 50, true, 1, view_mod_range_slider, BrighterColor(t_color_palette[mod_container_table_id], 3))
-			if _G["rv_macro" .. str_index] == true then		
+			_G["rv_macro" .. str_index], _G["macro_baseline" .. str_index], _G["macro" .. str_index] = CustomSlider("##" .. macro_name, _G["macro_baseline" .. str_index], _G["macro" .. str_index], min, max, width - x - win_padding_x, 13, 50, true, 1, view_mod_range_slider, BrighterColor2(t_color_palette[mod_container_table_id], 0.3))
+			if _G["rv_macro" .. str_index] == true then	
 
 				-- Check if conditions are fullfilled to show Macro value
 				local show_macro_val
 				if (param_lock == 1 and (touched_fx + (touched_param * 0.1)) == (fx + (macro_param_id * 0.1))) then -- If Flashmob is lock but the last-touched FX param is this macro
 					show_macro_val = true
-				elseif param_lock == 0 and t_last_param.param and macro_mod_enable == 1 then
+				-- elseif param_lock == 0 and t_last_param.param and macro_mod_enable == 1 then
+				elseif param_lock == 0 and macro_mod_enable == 1 then
 					show_macro_val = true
 				end
 
@@ -2061,7 +2157,7 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 		else
 			_G["macro" .. str_index] = macro_val
 			-- _G["rv_macro" .. str_index], _G["macro" .. str_index] = CustomSlider("##" .. macro_name, _G["macro" .. str_index], 0, min, max, width - x - win_padding_x, 13, 50, false, 1, 0, BrighterColor(UI_color, 1))
-			_G["rv_macro" .. str_index], _G["macro" .. str_index] = CustomSlider("##" .. macro_name, _G["macro" .. str_index], 0, min, max, width - x - win_padding_x, 13, 50, false, 1, 0, BrighterColor(t_color_palette[mod_container_table_id], 3))
+			_G["rv_macro" .. str_index], _G["macro" .. str_index] = CustomSlider("##" .. macro_name, _G["macro" .. str_index], 0, min, max, width - x - win_padding_x, 13, 50, false, 1, 0, BrighterColor2(t_color_palette[mod_container_table_id], 0.3))
 			if _G["rv_macro" .. str_index] == true then
 				reaper.TrackFX_SetParam(track, fx, macro_param_id, _G["macro" .. str_index])
 			end			
@@ -3381,7 +3477,7 @@ end
 
 function FlashmobInstanceSelector(track, title)
 	-- Multiple Flashmob instances selector
-	if instance_nb > 1 then 
+	if rv_flashmob == true and instance_nb > 1 then 
 		-- if title == 1 then
 		-- 	reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_SeparatorTextAlign(), 0.5, 0.5)
 		-- 	reaper.ImGui_SeparatorText(ctx, "Instance Selector")
@@ -3403,6 +3499,9 @@ function FlashmobInstanceSelector(track, title)
 				_G["modList" .. i] = 0
 				_G["modPopup" .. i] = 0
 			end	
+
+			CheckIfModIsUsed(track, mod_container_id)
+			CheckIfMacroIsUsed(track, mod_container_id)
 		end
 		ToolTip("Select previous Flashmob instance")
 		local arrow_w = reaper.ImGui_GetItemRectSize(ctx)
@@ -3493,6 +3592,9 @@ function FlashmobInstanceSelector(track, title)
 				_G["modList" .. i] = 0
 				_G["modPopup" .. i] = 0
 			end								
+
+			CheckIfModIsUsed(track, mod_container_id)
+			CheckIfMacroIsUsed(track, mod_container_id)			
 		end	
 		ToolTip("Select next Flashmob instance")
 		reaper.ImGui_PopStyleVar(ctx, 1)
@@ -3605,6 +3707,8 @@ function Init()
 	macro_baseline1, macro_baseline2, macro_baseline3, macro_baseline4, macro_baseline5, macro_baseline6, macro_baseline7, macro_baseline8 = nil
 	-- modPopup1, modPopup2, modPopup3, modPopup4, modPopup5, modPopup6 = nil
 	macroPopup1, macroPopup2, macroPopup3, macroPopup4, macroPopup5, macroPopup6, macroPopup7, macroPopup8 = nil
+	modUsed = {modUsed1 = nil, modUsed2 = nil, modUsed3 = nil, modUsed4 = nil, modUsed5 = nil, modUsed6 = nil}
+	macroUsed = {macroUsed1 = nil, macroUsed2 = nil, macroUsed3 = nil, macroUsed4 = nil, macroUsed5 = nil, macroUsed6 = nil}
 	-- child_height1, child_height2, child_height3, child_height4, child_height5, child_height6 = 76
 	-- test_1, test_2, test_3, test_4, test_5, test_6 = 0
 	UI_color = -1499027713 -- Grey
@@ -3774,12 +3878,17 @@ function Frame()
 				for i=1, 6 do
 					_G["modList" .. i] = 0
 					_G["modPopup" .. i] = 0
-				end									
+				end
+
+				if mod_container_id then
+					CheckIfModIsUsed(track, mod_container_id)
+					CheckIfMacroIsUsed(track, mod_container_id)
+				end												
 			end
 			last_track = track
 		end  
 
-		rv_flashmob, t_flashmob_id, t_flashmob_guid, flashmob_is_invalid = GetFlashmobInstances(track, flashmob_identifier)
+		rv_flashmob, t_flashmob_id, t_flashmob_guid, flashmob_is_invalid = GetFlashmobInstances(track, flashmob_identifier)		
 
 		if rv_flashmob == true then
 			if not mod_container_id then mod_container_id = t_flashmob_id[1] end						
@@ -3835,37 +3944,41 @@ function Frame()
 				mod_container_table_id = 1	
 				reaper.GetSetMediaTrackInfo_String(track, "P_EXT:vf_flashmob_last_instance", "", 1)
 			end
+		else
+			instance_nb = 0
+			setting_sidechain = 0
+		end
 
-			if first_run or project_switched or (param_lock == 0 and (track_sel_changed or slower_defer_update or proj_updated)) then
+		if first_run or project_switched or (param_lock == 0 and (track_sel_changed or slower_defer_update or proj_updated)) then
+
+			if rv_flashmob == true then
 				GetSidechain(track, mod_container_id) -- Get current Flashmob routing
 				SetFlashmobRouting(track, mod_container_id, setting_sidechain) -- Set current Flashmob instance routing based on Sidechain settings
-				param_is_valid, result = GetLastTouchedFXParam(track)
-			end			
+			end
+			param_is_valid, result = GetLastTouchedFXParam(track)
+		end			
 
-			-- Get param link mode
-			if param_is_valid == true then -- If there is a valid last touched parameter
-				if t_pm_data.link_source_fx and t_pm_data.link_source_fx > -1 then
-					param_link = 3 -- Linked to an FX parameter other than Flashmob
-					for i=1, #t_flashmob_id do
-						if t_flashmob_id[i] == t_pm_data.link_source_fx then
-							param_link = 2 -- Linked to another instance of Flashmob
-							if t_flashmob_id[i] == mod_container_id then
-								if t_pm_data.link_active == 1 then
-									param_link = 1 -- Linked to selected instance of Flashmob and activated
-									break
-								else
-									param_link = 0 -- Linked to selected instance of Flashmob and de-activated
-									break
-								end
+		-- Get param link mode
+		if param_is_valid == true then -- If there is a valid last touched parameter
+			if t_pm_data.link_source_fx and t_pm_data.link_source_fx > -1 then
+				param_link = 3 -- Linked to an FX parameter other than Flashmob
+				for i=1, #t_flashmob_id do
+					if t_flashmob_id[i] == t_pm_data.link_source_fx then
+						param_link = 2 -- Linked to another instance of Flashmob
+						if t_flashmob_id[i] == mod_container_id then
+							if t_pm_data.link_active == 1 then
+								param_link = 1 -- Linked to selected instance of Flashmob and activated
+								break
+							else
+								param_link = 0 -- Linked to selected instance of Flashmob and de-activated
+								break
 							end
 						end
 					end
-				else
-					param_link = -1 -- param is not linked
 				end
-			end	
-		else
-			setting_sidechain = 0
+			else
+				param_link = -1 -- param is not linked
+			end
 		end	
 
 		---------
@@ -4174,7 +4287,7 @@ function Frame()
 			end
 		else				
 
-			if rv_flashmob == true then			
+			-- if rv_flashmob == true then			
 				if reload_settings  == true then				
 					if header_state_param == 1 then
 						custom_headers["Header_Param"] = true
@@ -4390,7 +4503,7 @@ function Frame()
 								end
 
 								-- Format to 2 digits if last touched parameter is a MACRO
-								if t_last_param.fx == mod_container_id and t_last_param.param < 8 then
+								if rv_flashmob == true and t_last_param.fx == mod_container_id and t_last_param.param < 8 then
 									last_touched_param_value = string.format("%.2f", last_touched_param_value)
 								end
 								reaper.ImGui_Text(ctx, last_touched_param_value)
@@ -4523,7 +4636,7 @@ function Frame()
 											end
 
 										else
-											if t_pm_data.link_source_param > 7 then
+											if rv_flashmob == true and t_pm_data.link_source_param > 7 then
 												local index = 1
 												if t_pm_data.link_source_param > 7 and t_pm_data.link_source_param <= 9 then index = 1 end
 												if t_pm_data.link_source_param > 9 and t_pm_data.link_source_param <= 11 then index = 3 end											
@@ -4709,28 +4822,30 @@ function Frame()
 					if visible then	
 						reaper.ImGui_Dummy(ctx, 0, 0)	
 
-						-- Multiple Flashmob instances selector
-						FlashmobInstanceSelector(track, 1)
+						if rv_flashmob == true then	
+							-- Multiple Flashmob instances selector
+							FlashmobInstanceSelector(track, 1)					
 
-						if not flashmob_is_invalid then
-							-- Calcule Mod Graph Data here to be able to switch tabs without interupting the graphs
-							for i=1, 6 do
-								ModGraphData(track, mod_container_id, i)
-							end
-						end	
+							if not flashmob_is_invalid then
+								-- Calcule Mod Graph Data here to be able to switch tabs without interupting the graphs
+								for i=1, 6 do
+									ModGraphData(track, mod_container_id, i)
+								end
+							end	
+						end
 
-						-- Active macro mod when overview is enable
+						-- Active macro mod when overview is enabled
 						if full == 1 then
-							if not previous_macro_mod_enable then
-								previous_macro_mod_enable = macro_mod_enable
+							if not previous_macro_mod_enable_overview then
+								previous_macro_mod_enable_overview = macro_mod_enable
 								macro_mod_enable = 1
 							end
 						else				
-							if previous_macro_mod_enable then			
-								macro_mod_enable = previous_macro_mod_enable
-								previous_macro_mod_enable = nil
+							if previous_macro_mod_enable_overview then			
+								macro_mod_enable = previous_macro_mod_enable_overview
+								previous_macro_mod_enable_overview = nil
 							end
-						end						
+						end	
 
 						if full == 1 then 
 							-- reaper.ImGui_Dummy(ctx, 0, 0)
@@ -4868,7 +4983,23 @@ function Frame()
 									if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
 										local current_val = reaper.TrackFX_GetParam(track, item.fx_id, item.param_id)
 										reaper.TrackFX_SetParam(track, item.fx_id, item.param_id, current_val) -- To set as last touched param
-									end		
+									end	
+
+									-- Open native parameter modulation window
+									if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Right()) then
+										local current_val = reaper.TrackFX_GetParam(track, item.fx_id, item.param_id)
+										reaper.TrackFX_SetParam(track, item.fx_id, item.param_id, current_val) -- To set as last touched param										
+										local _, visible = reaper.TrackFX_GetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".mod.visible")
+										if visible == "1" then
+											reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".mod.visible", 0)
+										else
+											for j=1, #t_overview do
+												reaper.TrackFX_SetNamedConfigParm(track, t_overview[j].fx_id, "param." .. t_overview[j].param_id .. ".mod.visible", 0)
+											end	
+											reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".mod.visible", 1)
+										end
+										-- Command(41143) -- FX: Show parameter modulation/link for last touched FX parameter
+									end											
 
 									-- Delete modulation
 									local unlink_confirmed								
@@ -4903,7 +5034,6 @@ function Frame()
 										reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".learn.midi1", "")
 										reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".learn.midi2", "")
 									end
-
 
 									-- Draw the param name with the determined color
 									reaper.ImGui_SetCursorPos(ctx, x, y)	
@@ -5000,7 +5130,7 @@ function Frame()
 												break	
 											end
 										end			
-										if not mod_or_macro then mod_or_macro = "Unknown" end
+										if not mod_or_macro then mod_or_macro = "External" end
 
 										local x, y = reaper.ImGui_GetCursorPos(ctx)
 										reaper.ImGui_SetCursorPosY(ctx, y + 1)
@@ -5013,7 +5143,7 @@ function Frame()
 										local center_x, center_y = reaper.ImGui_GetCursorScreenPos(ctx)
 
 										-- local slider_color = UI_color
-										if mod_or_macro ~= "Unknown" then
+										if mod_or_macro ~= "External" then
 											if link_source_param > 7 then
 												reaper.ImGui_DrawList_AddCircle(draw_list, center_x + 4, center_y + 6, 8, t_color_palette[link_source_param - 7], num_segmentsIn, thicknessIn)
 												-- slider_color = t_color_palette[link_source_param - 7]
@@ -5064,9 +5194,7 @@ function Frame()
 
 											reaper.TrackFX_SetNamedConfigParm(track, item.fx_id, "param." .. item.param_id .. ".plink.scale", amount)
 										end										
-
 										reaper.ImGui_PopStyleColor(ctx, 3)	
-
 									end	
 
 									-- Draw LFO slider
@@ -5224,7 +5352,7 @@ function Frame()
 							end
 
 							if #t_overview == 0 then
-								reaper.ImGui_PushTextWrapPos(ctx, width)
+								reaper.ImGui_PushTextWrapPos(ctx, width - win_padding_x - 8)
 								reaper.ImGui_Text(ctx, "This track does not have any modulation yet")
 								reaper.ImGui_PopTextWrapPos(ctx)
 							end
@@ -5255,7 +5383,7 @@ function Frame()
 
 
 							-- Draw a line below the tab item to indicate that mod is active on the last-touched FX param
-							if t_pm_data.link_source_fx == mod_container_id and t_pm_data.link_source_param > 7 then
+							if rv_flashmob == true and t_pm_data.link_source_fx == mod_container_id and t_pm_data.link_source_param > 7 then
 								local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
 								local line_color = track_color
 								if line_color == UI_color then line_color = full_white end
@@ -5263,24 +5391,121 @@ function Frame()
 							end
 
 							reaper.ImGui_SetNextItemWidth(ctx, width / 3 - win_padding_x + 2)
-							if reaper.ImGui_BeginTabItem(ctx, "Mod", false, flag1) then								
+							local tab_selected_mod = reaper.ImGui_BeginTabItem(ctx, "Mod", false, flag1)
+							if tab_selected_mod then
 								opened_tab = 1
-								if not flashmob_is_invalid then
-									reaper.ImGui_BeginChild(ctx, "mod_child", size_wIn, size_hIn, borderIn, reaper.ImGui_ChildFlags_AutoResizeY()) -- To restrict the scrollbar to the mod tab content
-									for i=1, 6 do
-										ModChild(track, mod_container_id, i, t_last_param.fx, t_last_param.param, track_sel_changed, param_is_linked_to_anything)						
-									end
-									reaper.ImGui_EndChild(ctx)
 
-									-- If any MOD popup is open, set macro_mod_enable to 1 to be able to click and set modulated MACRO as last-touched FX param
-									local modPopup_open
-									for i=1, 6 do
-										if _G["modPopup" .. i] == 1 then
-											modPopup_open = true
+								if rv_flashmob == true then	
+									if not flashmob_is_invalid then
+										reaper.ImGui_BeginChild(ctx, "mod_child", size_wIn, size_hIn, borderIn, reaper.ImGui_ChildFlags_AutoResizeY()) -- To restrict the scrollbar to the mod tab content
+
+										if (tab_selected_mod and not previous_tab_selected_mod) or slower_defer_update then
+											CheckIfModIsUsed(track, mod_container_id)
+										end
+
+										for i=1, 6 do
+											ModChild(track, mod_container_id, i, t_last_param.fx, t_last_param.param, track_sel_changed, param_is_linked_to_anything)						
+										end
+										reaper.ImGui_EndChild(ctx)
+
+										-- If any MOD popup is open, set macro_mod_enable to 1 to be able to click and set modulated MACRO as last-touched FX param
+										local modPopup_open
+										for i=1, 6 do
+											if _G["modPopup" .. i] == 1 then
+												modPopup_open = true
+												break
+											end
+										end
+										if modPopup_open then
+											if not previous_macro_mod_enable then
+												previous_macro_mod_enable = macro_mod_enable
+												macro_mod_enable = 1
+											end
+										else				
+											if previous_macro_mod_enable then			
+												macro_mod_enable = previous_macro_mod_enable
+												previous_macro_mod_enable = nil
+											end
+										end
+
+									else
+										reaper.ImGui_PushTextWrapPos(ctx, width)
+										local invalid_flashmob_text = "Khs SnapHeap plugin is probably missing\nPlease read the manual for more info"
+										-- invalid_flashmob_text = WrapText(invalid_flashmob_text, width)								
+										reaper.ImGui_Text(ctx, invalid_flashmob_text)
+										reaper.ImGui_PopTextWrapPos(ctx)
+									end
+
+									previous_tab_selected_mod = tab_selected_mod
+								else
+									local height = 154
+									if t_pm_data.lfo_active == 1 then
+										height = height + 180
+									end
+									if t_pm_data.acs_active == 1 then
+										height = height + 180
+									end															
+									reaper.ImGui_Dummy(ctx, 0, 0)
+									local x, y = reaper.ImGui_GetCursorScreenPos(ctx)
+									local button_width = width * 0.75	
+									local button_height = 54
+									local center_x = x + (width * 0.5) - (button_width * 0.5) - win_padding_x
+									local center_y = y + (height * 0.5) - (button_height * 0.5) - win_padding_y * 2 - 10
+									reaper.ImGui_PushFont(ctx, fonts.medium_bold)
+									rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, DarkerColor2(UI_color, 0.25), DarkerColor2(UI_color, 0.1), 1)
+									reaper.ImGui_PopFont(ctx)
+									ToolTip("Click to enable FLASHMOB modulations on this track")
+									if rv_addContainer then
+										if reaper.file_exists(script_path .. "FXChains/" .. default_preset .. ".RfxChain") then
+											AddFlashmobInstance(track, 1)
+											reload_settings = true											
+										else
+											if user_os == "Win" then
+												StartModalWorkaround("error_missing_fxchain" .. str_index)
+											else	
+												reaper.ShowMessageBox(script_path .. "FXChains/" .. default_preset .. ".RfxChain file is missing.\n\nPlease, choose another default preset in the script settings or reinstall the script.", "ERROR", 0)
+											end								
+										end
+									end	
+								end
+
+								reaper.ImGui_EndTabItem(ctx)
+							end
+
+							-- Draw a line below the tab item to indicate that macro is active on the last-touched FX param
+							if rv_flashmob == true and t_pm_data.link_source_fx == mod_container_id and t_pm_data.link_source_param <= 7 then							
+								local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
+								local line_color = track_color
+								if line_color == UI_color then line_color = full_white end							
+								reaper.ImGui_DrawList_AddLine(draw_list, screen_x + width / 3 - win_padding_x + 3, screen_y - 5, screen_x + (width / 3 * 2) - win_padding_x - 4, screen_y - 5, line_color, 2)
+							end						
+
+							reaper.ImGui_SetNextItemWidth(ctx, width / 3 - win_padding_x + 1)
+							local tab_selected_macro = reaper.ImGui_BeginTabItem(ctx, "Macro", false, flag2)
+							if tab_selected_macro then
+								opened_tab = 2
+								if rv_flashmob == true then	
+
+									reaper.ImGui_BeginChild(ctx, "macro_child", size_wIn, size_hIn, borderIn, reaper.ImGui_ChildFlags_AutoResizeY()) -- To restrict the scrollbar to the mod tab content
+
+									if (tab_selected_macro and not previous_tab_selected_macro) or slower_defer_update then
+										CheckIfMacroIsUsed(track, mod_container_id)
+									end
+
+									for i=1, 8 do
+										Macro(track, mod_container_id, i, t_last_param.fx, t_last_param.param, track_sel_changed, param_is_linked_to_anything)
+									end	
+									reaper.ImGui_EndChild(ctx)	
+
+									-- If any MACRO popup is open, set macro_mod_enable to 1 to be able to click and set modulated MACRO as last-touched FX param
+									local macroPopup_open
+									for i=1, 8 do
+										if _G["macroPopup" .. i] == 1 then
+											macroPopup_open = true
 											break
 										end
 									end
-									if modPopup_open then
+									if macroPopup_open then
 										if not previous_macro_mod_enable then
 											previous_macro_mod_enable = macro_mod_enable
 											macro_mod_enable = 1
@@ -5290,55 +5515,41 @@ function Frame()
 											macro_mod_enable = previous_macro_mod_enable
 											previous_macro_mod_enable = nil
 										end
-									end
+									end										
 
+									previous_tab_selected_macro = tab_selected_macro
 								else
-									reaper.ImGui_PushTextWrapPos(ctx, width)
-									local invalid_flashmob_text = "Khs SnapHeap plugin is probably missing\nPlease read the manual for more info"
-									-- invalid_flashmob_text = WrapText(invalid_flashmob_text, width)								
-									reaper.ImGui_Text(ctx, invalid_flashmob_text)
-									reaper.ImGui_PopTextWrapPos(ctx)
-								end
-								reaper.ImGui_EndTabItem(ctx)
-							end
-
-							-- Draw a line below the tab item to indicate that macro is active on the last-touched FX param
-							if t_pm_data.link_source_fx == mod_container_id and t_pm_data.link_source_param <= 7 then							
-								local draw_list = reaper.ImGui_GetWindowDrawList(ctx)
-								local line_color = track_color
-								if line_color == UI_color then line_color = full_white end							
-								reaper.ImGui_DrawList_AddLine(draw_list, screen_x + width / 3 - win_padding_x + 3, screen_y - 5, screen_x + (width / 3 * 2) - win_padding_x - 4, screen_y - 5, line_color, 2)
-							end						
-
-							reaper.ImGui_SetNextItemWidth(ctx, width / 3 - win_padding_x + 1)
-							if reaper.ImGui_BeginTabItem(ctx, "Macro", false, flag2) then		
-								opened_tab = 2
-								reaper.ImGui_BeginChild(ctx, "macro_child", size_wIn, size_hIn, borderIn, reaper.ImGui_ChildFlags_AutoResizeY()) -- To restrict the scrollbar to the mod tab content
-								for i=1, 8 do
-									Macro(track, mod_container_id, i, t_last_param.fx, t_last_param.param, track_sel_changed, param_is_linked_to_anything)
-								end	
-								reaper.ImGui_EndChild(ctx)	
-
-								-- If any MACRO popup is open, set macro_mod_enable to 1 to be able to click and set modulated MACRO as last-touched FX param
-								local macroPopup_open
-								for i=1, 8 do
-									if _G["macroPopup" .. i] == 1 then
-										macroPopup_open = true
-										break
+									reaper.ImGui_Dummy(ctx, 0, 0)
+									local height = 154
+									if t_pm_data.lfo_active == 1 then
+										height = height + 180
 									end
+									if t_pm_data.acs_active == 1 then
+										height = height + 180
+									end								
+									local x, y = reaper.ImGui_GetCursorScreenPos(ctx)
+									local button_width = width * 0.75	
+									local button_height = 54
+									local center_x = x + (width * 0.5) - (button_width * 0.5) - win_padding_x
+									-- local center_y = y + (height * 0.5) - (button_height * 0.5) - win_padding_y * 2 - 10
+									local center_y = y + (height * 0.5) - (button_height * 0.5) - win_padding_y * 2 - 10
+									reaper.ImGui_PushFont(ctx, fonts.medium_bold)
+									rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, DarkerColor2(UI_color, 0.25), DarkerColor2(UI_color, 0.1), 1)
+									reaper.ImGui_PopFont(ctx)
+									ToolTip("Click to enable FLASHMOB macros on this track")
+									if rv_addContainer then
+										if reaper.file_exists(script_path .. "FXChains/" .. default_preset .. ".RfxChain") then
+											AddFlashmobInstance(track, 1)
+											reload_settings = true											
+										else
+											if user_os == "Win" then
+												StartModalWorkaround("error_missing_fxchain" .. str_index)
+											else	
+												reaper.ShowMessageBox(script_path .. "FXChains/" .. default_preset .. ".RfxChain file is missing.\n\nPlease, choose another default preset in the script settings or reinstall the script.", "ERROR", 0)
+											end								
+										end
+									end	
 								end
-								if macroPopup_open then
-									if not previous_macro_mod_enable then
-										previous_macro_mod_enable = macro_mod_enable
-										macro_mod_enable = 1
-									end
-								else				
-									if previous_macro_mod_enable then			
-										macro_mod_enable = previous_macro_mod_enable
-										previous_macro_mod_enable = nil
-									end
-								end
-
 								reaper.ImGui_EndTabItem(ctx)
 							end	
 
@@ -5351,30 +5562,30 @@ function Frame()
 							end												
 			
 							reaper.ImGui_SetNextItemWidth(ctx, width / 3 - win_padding_x + 1)
-							local tab_selected = reaper.ImGui_BeginTabItem(ctx, "Native", false, flag3)					
+							local tab_selected_native = reaper.ImGui_BeginTabItem(ctx, "Native", false, flag3)					
 							if t_last_param.param then
 
 								-- Get LFO data for first frame of the tab or if project state change
-								if (tab_selected and not previous_tab_selected) or (tab_selected and slower_defer_update) then
+								if (tab_selected_native and not previous_tab_selected_native) or (tab_selected_native and slower_defer_update) then
 									GetNativeLFOData(track, t_last_param.fx, t_last_param.param)
 									GetNativeACSData(track, t_last_param.fx, t_last_param.param)
 								end
 								-- Draw LFO GUI
-								if tab_selected then
+								if tab_selected_native then
 									DrawMIDILearn(track, t_last_param.fx, t_last_param.param)
 									DrawNativeLFO(track, t_last_param.fx, t_last_param.param)
 									DrawNativeACS(track, t_last_param.fx, t_last_param.param)													
 								end
-								previous_tab_selected = tab_selected											
+								previous_tab_selected_native = tab_selected_native											
 							else
-								if tab_selected then
+								if tab_selected_native then
 									reaper.ImGui_PushTextWrapPos(ctx, 0)
 									reaper.ImGui_Text(ctx, "No last-touched FX parameter detected")
 									reaper.ImGui_PopTextWrapPos(ctx)
 								end
 							end								
 
-							if tab_selected then
+							if tab_selected_native then
 								opened_tab = 3
 								reaper.ImGui_EndTabItem(ctx)
 							end				
@@ -5413,40 +5624,40 @@ function Frame()
 				end	
 	
 
-			else
-				reaper.ImGui_Dummy(ctx, 0, 0)
-				local x, y = reaper.ImGui_GetCursorScreenPos(ctx)
-				local button_width = width * 0.75	
-				local button_height = height * 0.35		
-				local center_x = x + (width * 0.5) - (button_width * 0.5) - win_padding_x
-				local center_y = y + (height * 0.5) - (button_height * 0.5) - win_padding_y * 2 - 10
-				-- reaper.ImGui_SetCursorPos(ctx, center_x, center_y)
-				reaper.ImGui_PushFont(ctx, fonts.medium_bold)
-				-- rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, white, track_color, 1)
-				-- rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, DarkerColor2(track_color, 0.4), DarkerColor2(track_color, 0.2), 1)
-				rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, DarkerColor2(UI_color, 0.25), DarkerColor2(UI_color, 0.1), 1)
-				-- rv_addContainer = reaper.ImGui_Button(ctx, "Enable Flashmob", button_width, button_height)
-				reaper.ImGui_PopFont(ctx)
-				ToolTip("Click to enable FLASHMOB modulations & macros on this track")
-				if rv_addContainer then
-					-- reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts Beta/Flashmob/Flashmob.RfxChain", false, 1000)	-- last argument adds an instance if one is not found at the first FX chain index				
-					if reaper.file_exists(script_path .. "FXChains/" .. default_preset .. ".RfxChain") then
-						AddFlashmobInstance(track, 1)
-						reload_settings = true						
-						-- local openFloating_setting = reaper.SNM_GetIntConfigVar("fxfloat_focus", -666) -- Save the original user setting to open or not floating window when adding new FX
-						-- reaper.SNM_SetIntConfigVar("fxfloat_focus", openFloating_setting&(~4)) -- Temporarly disable the user setting
-						-- reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts Beta/Flashmob/FXChains/" .. default_preset  .. ".RfxChain", false, 1024)	-- last argument adds an instance if one is not found at the first FX chain index				
-						-- reaper.TrackFX_CopyToTrack(track, reaper.TrackFX_GetCount(track)-1, track, 0, 1) -- Move Flashmob to the first FX chain slot
-						-- reaper.SNM_SetIntConfigVar("fxfloat_focus", openFloating_setting) -- Restore user setting						
-					else
-						if user_os == "Win" then
-							StartModalWorkaround("error_missing_fxchain" .. str_index)
-						else	
-							reaper.ShowMessageBox(script_path .. "FXChains/" .. default_preset .. ".RfxChain file is missing.\n\nPlease, choose another default preset in the script settings or reinstall the script.", "ERROR", 0)
-						end								
-					end
-				end	
-			end
+			-- else
+			-- 	reaper.ImGui_Dummy(ctx, 0, 0)
+			-- 	local x, y = reaper.ImGui_GetCursorScreenPos(ctx)
+			-- 	local button_width = width * 0.75	
+			-- 	local button_height = height * 0.35		
+			-- 	local center_x = x + (width * 0.5) - (button_width * 0.5) - win_padding_x
+			-- 	local center_y = y + (height * 0.5) - (button_height * 0.5) - win_padding_y * 2 - 10
+			-- 	-- reaper.ImGui_SetCursorPos(ctx, center_x, center_y)
+			-- 	reaper.ImGui_PushFont(ctx, fonts.medium_bold)
+			-- 	-- rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, white, track_color, 1)
+			-- 	-- rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, DarkerColor2(track_color, 0.4), DarkerColor2(track_color, 0.2), 1)
+			-- 	rv_addContainer = GradientButton(ctx, "Enable Flashmob", center_x, center_y, button_width, button_height, DarkerColor2(UI_color, 0.25), DarkerColor2(UI_color, 0.1), 1)
+			-- 	-- rv_addContainer = reaper.ImGui_Button(ctx, "Enable Flashmob", button_width, button_height)
+			-- 	reaper.ImGui_PopFont(ctx)
+			-- 	ToolTip("Click to enable FLASHMOB modulations & macros on this track")
+			-- 	if rv_addContainer then
+			-- 		-- reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts Beta/Flashmob/Flashmob.RfxChain", false, 1000)	-- last argument adds an instance if one is not found at the first FX chain index				
+			-- 		if reaper.file_exists(script_path .. "FXChains/" .. default_preset .. ".RfxChain") then
+			-- 			AddFlashmobInstance(track, 1)
+			-- 			reload_settings = true						
+			-- 			-- local openFloating_setting = reaper.SNM_GetIntConfigVar("fxfloat_focus", -666) -- Save the original user setting to open or not floating window when adding new FX
+			-- 			-- reaper.SNM_SetIntConfigVar("fxfloat_focus", openFloating_setting&(~4)) -- Temporarly disable the user setting
+			-- 			-- reaper.TrackFX_AddByName(track, "../Scripts/VF_ReaScripts Beta/Flashmob/FXChains/" .. default_preset  .. ".RfxChain", false, 1024)	-- last argument adds an instance if one is not found at the first FX chain index				
+			-- 			-- reaper.TrackFX_CopyToTrack(track, reaper.TrackFX_GetCount(track)-1, track, 0, 1) -- Move Flashmob to the first FX chain slot
+			-- 			-- reaper.SNM_SetIntConfigVar("fxfloat_focus", openFloating_setting) -- Restore user setting						
+			-- 		else
+			-- 			if user_os == "Win" then
+			-- 				StartModalWorkaround("error_missing_fxchain" .. str_index)
+			-- 			else	
+			-- 				reaper.ShowMessageBox(script_path .. "FXChains/" .. default_preset .. ".RfxChain file is missing.\n\nPlease, choose another default preset in the script settings or reinstall the script.", "ERROR", 0)
+			-- 			end								
+			-- 		end
+			-- 	end	
+			-- end
 		end
 
 	else
@@ -5505,17 +5716,27 @@ function Loop()
 	if help_page == 1 or settings_page == 1 then
 		main_height = 704
 	else 
-		if rv_flashmob == true then
-			if custom_headers["Header_Source"] then 
-				main_height = main_height + 512
-				if instance_nb > 1 then
-					main_height = main_height + 24
+		if custom_headers["Header_Source"] then 
+			if full == 1 then 
+				main_height = 594 
+			else
+				if rv_flashmob == true then
+					main_height = main_height + 512
+					if instance_nb > 1 then
+						main_height = main_height + 24
+					end
+				else
+					main_height = 232
+					if t_pm_data.lfo_active == 1 then
+						main_height = main_height + 180
+					end
+					if t_pm_data.acs_active == 1 then
+						main_height = main_height + 180
+					end					
 				end
 			end
-			if custom_headers["Header_Param"] then main_height = main_height + 110 end
-		else
-			main_height = 114
 		end
+		if custom_headers["Header_Param"] then main_height = main_height + 110 end
 	end
 
 	reaper.ImGui_SetNextWindowSizeConstraints(ctx, 160, main_height, 600, main_height)
@@ -5578,6 +5799,7 @@ end
 --   '/Scripts/ReaTeam Scripts/Development/cfillion_Lua profiler.lua')
 -- reaper.defer = profiler.defer
 -- profiler.attachToWorld() -- after all functions have been defined
+-- profiler.detachFrom('debug.getinfo')
 -- profiler.run()
 
 if Init() == true then
