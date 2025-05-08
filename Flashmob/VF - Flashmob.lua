@@ -2,7 +2,7 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.5.9
+-- @Version 0.5.10
 -- @Changelog
 --   Minor UI improvements
 -- @Provides
@@ -96,6 +96,8 @@ Full Changelog:
 		+ Add an option to open FX in floating window by default
 	v0.5.7
 		+ Minor UI improvements	
+	v0.5.10
+		+ Minor improvements
 
 
 ]]
@@ -3850,7 +3852,7 @@ function Init()
 	if setting_tooltip == "" then setting_tooltip = 1 else setting_tooltip = tonumber(setting_tooltip) end	
 
 	setting_floating_fx = reaper.GetExtState("vf_flashmob", "floating_fx")	
-	if setting_floating_fx == "" then setting_floating_fx = 1 else setting_floating_fx = tonumber(setting_floating_fx) end		
+	if setting_floating_fx == "" then setting_floating_fx = 0 else setting_floating_fx = tonumber(setting_floating_fx) end		
 
 	-- Init Sidechain setting
 	setting_sidechain = 0
@@ -4056,7 +4058,7 @@ function Frame()
 			local x_color = reaper.ImGui_ColorConvertDouble4ToU32(0.2, 0.2, 0.2, 0.3)
 
 			reaper.ImGui_SetCursorScreenPos(ctx, rect_x + width - 28, rect_y - 6)
-			if reaper.ImGui_IsMouseHoveringRect(ctx, rect_x + width - 28, rect_y - 4, rect_x + width - 28 + 18, rect_y - 4 + text_h + 4) then
+			if reaper.ImGui_IsMouseHoveringRect(ctx, rect_x + width - 32, rect_y - 4, rect_x + width - 32 + 18, rect_y - 4 + text_h + 4) then
 				x_color = reaper.ImGui_ColorConvertDouble4ToU32(0, 0, 0, 1)
 				reaper.ImGui_DrawList_AddCircleFilled(draw_list, rect_x + width - 24, rect_y + 2, 8, x_color, 20)
 				reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), white)
@@ -5168,13 +5170,12 @@ function Frame()
 
 								-- Draw the param name with the determined color
 								reaper.ImGui_SetCursorPos(ctx, x, y)
-
 								if t_last_param.param and item.fx_id == t_last_param.fx and item.param_id == t_last_param.param then
 									-- overview_color = BrighterColor2(overview_color, 0.4)
 									reaper.ImGui_PushFont(ctx, fonts.medium_bold)
 								end										
 
-								local width_for_paramName = width * 0.5 - win_padding_x * 2 - 4
+								local width_for_paramName = width * 0.5 - win_padding_x * 2 - 6
 								local param_name_clipped = ClipText(item.param_name, width_for_paramName)
 								reaper.ImGui_TextColored(ctx, overview_color, param_name_clipped)
 
@@ -5643,7 +5644,7 @@ function Frame()
 									end
 
 								else
-									reaper.ImGui_PushTextWrapPos(ctx, width)
+									reaper.ImGui_PushTextWrapPos(ctx, width - 4)
 									local invalid_flashmob_text = "Khs SnapHeap plugin is probably missing\nPlease read the manual for more info"
 									-- invalid_flashmob_text = WrapText(invalid_flashmob_text, width)								
 									reaper.ImGui_Text(ctx, invalid_flashmob_text)
