@@ -2,7 +2,7 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.5.7
+-- @Version 0.5.8
 -- @Changelog
 --   Minor UI improvements
 -- @Provides
@@ -797,8 +797,6 @@ function ModGraphData(track, fx, index)
 	local mod_param_id = index + 7
 	local mod_val = reaper.TrackFX_GetParamEx(track, fx, mod_param_id)	
 
-
-
 	local PLOT_SIZE = 90
 
 	-- The big challenge here have been to be able to assign dynamic variable name. It's possible with the global table "_G"
@@ -808,7 +806,7 @@ function ModGraphData(track, fx, index)
 			data         = reaper.new_array(PLOT_SIZE),
 		}
 		_G["plots" .. str_index].data.clear()
-		reset_plot_lines = nil
+		if index == 6 then reset_plot_lines = nil end
 	end		
 
 	_G["plots" .. str_index].data[_G["plots" .. str_index].offset] = mod_val

@@ -17,14 +17,15 @@ freq = 20000;
 
 @slider
   vol=2 ^ (db/6); 
-  adj = 2.0*$pi*freq/srate;
+  //adj = 2.0*$pi*freq/srate;
 
 @sample
-sine = cos(pos);
-sine *= vol;
+//sine = cos(pos);
+//sine *= vol;
+dc = 1 * vol;
 
-spl0 = sine;
-spl1 = sine;
+spl0 = dc;
+spl1 = dc;
 
-pos=pos+adj;
-(pos >= 2.0*$pi) ? pos -= 2.0*$pi;
+//pos=pos+adj;
+//(pos >= 2.0*$pi) ? pos -= 2.0*$pi;
