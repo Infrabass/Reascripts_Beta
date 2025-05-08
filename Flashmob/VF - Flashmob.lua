@@ -2,7 +2,7 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.5.4
+-- @Version 0.5.5
 -- @Changelog
 --   Various improvements
 -- @Provides
@@ -5162,19 +5162,32 @@ function Frame()
 												break
 											end
 										end
-									end
+									end									
+
+									local disabled
+									if not reaper.TrackFX_GetEnabled(track, item.fx_id) then
+										disabled = true
+									end												
 
 									if border then
 										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Border(), overview_color)
 										reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ChildBorderSize(), 2)
-									end
+									end			
+
+									if disabled then
+										reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Border(), DarkerColor2(UI_color, 0.6))
+									end											
 
 									child_open = reaper.ImGui_BeginChild(ctx, item.fx_id, avail, height, reaper.ImGui_ChildFlags_Border(), reaper.ImGui_ChildFlags_AutoResizeY())									
 
 									if border then
 										reaper.ImGui_PopStyleVar(ctx, 1)
 										reaper.ImGui_PopStyleColor(ctx, 1)
-									end										
+									end	
+
+									if disabled then
+										reaper.ImGui_PopStyleColor(ctx, 1)
+									end									
 								end
 
 								if child_open then
@@ -5224,8 +5237,13 @@ function Frame()
 										reaper.ImGui_PopFont(ctx)
 
 										local screen_x, screen_y = reaper.ImGui_GetCursorScreenPos(ctx)
+
+										local line_color = DarkerColor2(UI_color, 0.3)
+										if disabled then
+											line_color = DarkerColor2(UI_color, 0.6)
+										end			
 										-- reaper.ImGui_DrawList_AddLine(draw_list, screen_x - win_padding_x, screen_y - 1, screen_x + avail - win_padding_x, screen_y - 1, child_border_col, 1)
-										reaper.ImGui_DrawList_AddLine(draw_list, screen_x - win_padding_x, screen_y - 1, screen_x + avail - win_padding_x, screen_y - 1, DarkerColor2(UI_color, 0.3), 1)
+										reaper.ImGui_DrawList_AddLine(draw_list, screen_x - win_padding_x, screen_y - 1, screen_x + avail - win_padding_x, screen_y - 1, line_color, 1)
 										reaper.ImGui_Dummy(ctx, 0, 6)
 
 									end
@@ -5520,8 +5538,12 @@ function Frame()
 										reaper.ImGui_TextColored(ctx, UI_color, "Lfo")
 										reaper.ImGui_SameLine(ctx)
 
+										local sine_color = UI_color
+										if disabled then
+											sine_color = DarkerColor2(UI_color, 0.4)
+										end													
 										local screen_x, screen_y = reaper.ImGui_GetCursorScreenPos(ctx)										
-										SineWave(draw_list, screen_x, screen_y, 16, 14, UI_color, 2)
+										SineWave(draw_list, screen_x, screen_y, 16, 14, sine_color, 2)
 
 										reaper.ImGui_SameLine(ctx)	
 										
@@ -5578,8 +5600,12 @@ function Frame()
 										reaper.ImGui_TextColored(ctx, UI_color, "Acs")
 										reaper.ImGui_SameLine(ctx)
 
+										local adEnv_color = UI_color
+										if disabled then
+											adEnv_color = DarkerColor2(UI_color, 0.4)
+										end	
 										local screen_x, screen_y = reaper.ImGui_GetCursorScreenPos(ctx)										
-										ADEnvelope(draw_list, screen_x, screen_y, 16, 14, UI_color, 2)
+										ADEnvelope(draw_list, screen_x, screen_y, 16, 14, adEnv_color, 2)
 
 										reaper.ImGui_SameLine(ctx)	
 										
@@ -5686,7 +5712,7 @@ function Frame()
 										reaper.ImGui_Dummy(ctx, 0, 0)																
 									end	
 
-									if not reaper.TrackFX_GetEnabled(track, item.fx_id) then
+									if disabled then
 										reaper.ImGui_EndDisabled(ctx)
 									end											
 								end													
