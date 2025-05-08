@@ -2,9 +2,9 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.5.5
+-- @Version 0.5.7
 -- @Changelog
---   Various improvements
+--   Minor UI improvements
 -- @Provides
 --   [main] VF - Flashmob.lua
 --   vf_FLASHMOB.jsfx
@@ -91,6 +91,11 @@ Full Changelog:
 		+ Improve assignation lists and overview sliders
 	v0.5.4
 		+ Various improvements
+	v0.5.6
+		+ Add native LFO sync beat values
+		+ Add an option to open FX in floating window by default
+	v0.5.7
+		+ Minor UI improvements	
 
 
 ]]
@@ -1795,11 +1800,11 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 					-- Use a dummy invisible button to detect hover first
 					-- local assignation_color = DarkerColor(t_color_palette[index], 4)
 					local assignation_color = DarkerColor2(t_color_palette[index], 0.1)
-					local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, t_assignations[i].param_name)
+					local param_name_clipped = ClipText(t_assignations[i].param_name, width * 0.5 - win_padding_x * 2)					
+					local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, param_name_clipped)
 					local x, y = reaper.ImGui_GetCursorPos( ctx )
 					-- reaper.ImGui_SetCursorPos(ctx, x, y + 8)
 					reaper.ImGui_InvisibleButton(ctx, "hover_area", text_size_x, text_size_y)
-					ToolTip("Alt-click: Delete assignation")
 
 					if reaper.ImGui_IsItemHovered(ctx) then
 						-- assignation_color = BrighterColor(t_color_palette[index], 1)
@@ -1844,8 +1849,19 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 
 					-- Draw the param name with the determined color
 					reaper.ImGui_SameLine(ctx)
-					reaper.ImGui_SetCursorPos(ctx, x, y)			
-					reaper.ImGui_TextColored(ctx, assignation_color, t_assignations[i].param_name)
+					reaper.ImGui_SetCursorPos(ctx, x, y)	
+
+					if t_last_param.param and t_assignations[i].fx_id == t_last_param.fx and t_assignations[i].param_id == t_last_param.param then
+						reaper.ImGui_PushFont(ctx, fonts.medium_bold)
+					end	
+
+					reaper.ImGui_TextColored(ctx, assignation_color, param_name_clipped)
+					if param_name_clipped ~= t_assignations[i].param_name then ToolTip(t_assignations[i].param_name, 1) end
+					ToolTip("Alt-click: Delete assignation")
+
+					if t_last_param.param and t_assignations[i].fx_id == t_last_param.fx and t_assignations[i].param_id == t_last_param.param then
+						reaper.ImGui_PopFont(ctx)
+					end						
 
 					-- Draw FX name if this is a new FX
 					if i == 1 or t_assignations[i].fx_id ~= t_assignations[i-1].fx_id then
@@ -1862,20 +1878,28 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 						-- Open FX
 						if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
 							if reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Ctrl()) then
-								reaper.TrackFX_Show(track, t_assignations[i].fx_id, 3) -- In floating window					
+								if setting_floating_fx == 0 then
+									reaper.TrackFX_Show(track, t_assignations[i].fx_id, 3) -- In floating window					
+								else
+									reaper.TrackFX_Show(track, t_assignations[i].fx_id, 1) -- In FXchain
+								end
 							else
-								reaper.TrackFX_Show(track, t_assignations[i].fx_id, 1) -- In FXchain	
+								if setting_floating_fx == 0 then
+									reaper.TrackFX_Show(track, t_assignations[i].fx_id, 1) -- In FXchain
+								else
+									reaper.TrackFX_Show(track, t_assignations[i].fx_id, 3) -- In floating window					
+								end
 							end
-						end					
+						end											
 
 						-- Draw the fx name
 						reaper.ImGui_SameLine(ctx)
 						reaper.ImGui_PushFont(ctx, fonts.small)
-						reaper.ImGui_SetCursorPos(ctx, x, y + 3)
+						reaper.ImGui_SetCursorPos(ctx, width * 0.5, y + 3)
 						local width_for_fxName = reaper.ImGui_GetContentRegionAvail(ctx)
 						local fx_name_clipped = ClipText(t_assignations[i].fx_name, width_for_fxName)
 						reaper.ImGui_TextColored(ctx, assignation_color, fx_name_clipped)
-						if fx_name_clipped ~= t_assignations[i].fx_name then ToolTip(t_assignations[i].fx_name) end
+						if fx_name_clipped ~= t_assignations[i].fx_name then ToolTip(t_assignations[i].fx_name, 1) end
 						reaper.ImGui_PopFont(ctx)
 					end
 
@@ -2372,11 +2396,10 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 					if i == 1 then reaper.ImGui_Dummy(ctx, 0, 6) end
 					-- assignation_color = DarkerColor(t_color_palette[mod_container_table_id], 4)
 					assignation_color = DarkerColor2(t_color_palette[mod_container_table_id], 0.1)
-
-					local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, t_assignations[i].param_name)
+					local param_name_clipped = ClipText(t_assignations[i].param_name, width * 0.5 - win_padding_x * 2)
+					local text_size_x, text_size_y = reaper.ImGui_CalcTextSize(ctx, param_name_clipped)
 					local x, y = reaper.ImGui_GetCursorPos( ctx )
 					reaper.ImGui_InvisibleButton(ctx, "hover_area", text_size_x, text_size_y)
-					ToolTip("Alt-click: Delete assignation")
 
 					if reaper.ImGui_IsItemHovered(ctx) then
 						-- assignation_color = BrighterColor(t_color_palette[mod_container_table_id])
@@ -2421,8 +2444,19 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 					-- Draw the text with the determined color
 					reaper.ImGui_SameLine(ctx)
 					reaper.ImGui_SetCursorPos(ctx, x, y)
-					reaper.ImGui_SetNextItemAllowOverlap(ctx)				
-					reaper.ImGui_TextColored(ctx, assignation_color, t_assignations[i].param_name)
+					reaper.ImGui_SetNextItemAllowOverlap(ctx)	
+
+					if t_last_param.param and t_assignations[i].fx_id == t_last_param.fx and t_assignations[i].param_id == t_last_param.param then
+						reaper.ImGui_PushFont(ctx, fonts.medium_bold)
+					end	
+
+					reaper.ImGui_TextColored(ctx, assignation_color, param_name_clipped)
+					if param_name_clipped ~= t_assignations[i].param_name then ToolTip(t_assignations[i].param_name, 1) end
+					ToolTip("Alt-click: Delete assignation")
+
+					if t_last_param.param and t_assignations[i].fx_id == t_last_param.fx and t_assignations[i].param_id == t_last_param.param then
+						reaper.ImGui_PopFont(ctx)
+					end						
 
 					-- Draw FX name if this is a new FX
 					if i == 1 or t_assignations[i].fx_id ~= t_assignations[i-1].fx_id then
@@ -2439,20 +2473,28 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 						-- Open FX
 						if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
 							if reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Ctrl()) then
-								reaper.TrackFX_Show(track, t_assignations[i].fx_id, 3) -- In floating window					
+								if setting_floating_fx == 0 then
+									reaper.TrackFX_Show(track, t_assignations[i].fx_id, 3) -- In floating window					
+								else
+									reaper.TrackFX_Show(track, t_assignations[i].fx_id, 1) -- In FXchain
+								end
 							else
-								reaper.TrackFX_Show(track, t_assignations[i].fx_id, 1) -- In FXchain	
+								if setting_floating_fx == 0 then
+									reaper.TrackFX_Show(track, t_assignations[i].fx_id, 1) -- In FXchain
+								else
+									reaper.TrackFX_Show(track, t_assignations[i].fx_id, 3) -- In floating window					
+								end
 							end
 						end					
 
 						-- Draw the fx name
 						reaper.ImGui_SameLine(ctx)
 						reaper.ImGui_PushFont(ctx, fonts.small)
-						reaper.ImGui_SetCursorPos(ctx, x, y + 3)
+						reaper.ImGui_SetCursorPos(ctx, width * 0.5, y + 3)
 						local width_for_fxName = reaper.ImGui_GetContentRegionAvail(ctx)
 						local fx_name_clipped = ClipText(t_assignations[i].fx_name, width_for_fxName)
 						reaper.ImGui_TextColored(ctx, assignation_color, fx_name_clipped)
-						if fx_name_clipped ~= t_assignations[i].fx_name then ToolTip(t_assignations[i].fx_name) end
+						if fx_name_clipped ~= t_assignations[i].fx_name then ToolTip(t_assignations[i].fx_name, 1) end
 						reaper.ImGui_PopFont(ctx)
 					end
 
@@ -2787,31 +2829,47 @@ function DrawNativeLFO(track, fx, param)
 				-- 	reaper.ImGui_EndCombo(ctx)
 				-- end	
 		
-				local beat = '1/16\0' .. '1/8\0' .. '1/4\0' .. '1/2\0' .. '1/1\0' .. '2/1\0'
+				-- local beat = '1/16\0' .. '1/8\0' .. '1/4\0' .. '1/2\0' .. '1/1\0' .. '2/1\0'
+				local beat = '1/16\0' .. '1/8 T\0' .. '1/8\0' .. '1/4 T\0' .. '1/4\0' .. '1/2 T\0' .. '1/2\0' .. '1/1 T\0' .. '1/1\0' .. '2/1 T\0' .. '2/1\0'
 				local current_beat = 0
 				if t_lfo_params.lfo_speed == 0.25 then current_beat = 0
-				elseif t_lfo_params.lfo_speed > 0.25 and t_lfo_params.lfo_speed <= 0.5 then current_beat = 1
-				elseif t_lfo_params.lfo_speed > 0.5 and t_lfo_params.lfo_speed <= 1 then current_beat = 2
-				elseif t_lfo_params.lfo_speed > 1 and t_lfo_params.lfo_speed <= 2 then current_beat = 3
-				elseif t_lfo_params.lfo_speed > 2 and t_lfo_params.lfo_speed <= 4 then current_beat = 4
-				elseif t_lfo_params.lfo_speed > 4 and t_lfo_params.lfo_speed <= 8 then current_beat = 5
+				elseif t_lfo_params.lfo_speed > 0.25 and t_lfo_params.lfo_speed <= 0.3333 then current_beat = 1
+				elseif t_lfo_params.lfo_speed > 0.3333 and t_lfo_params.lfo_speed <= 0.5 then current_beat = 2
+				elseif t_lfo_params.lfo_speed > 0.5 and t_lfo_params.lfo_speed <= 0.6667 then current_beat = 3
+				elseif t_lfo_params.lfo_speed > 0.6667 and t_lfo_params.lfo_speed <= 1 then current_beat = 4
+				elseif t_lfo_params.lfo_speed > 1 and t_lfo_params.lfo_speed <= 1.3333 then current_beat = 5
+				elseif t_lfo_params.lfo_speed > 1.3333 and t_lfo_params.lfo_speed <= 2 then current_beat = 6
+				elseif t_lfo_params.lfo_speed > 2 and t_lfo_params.lfo_speed <= 2.6667 then current_beat = 7
+				elseif t_lfo_params.lfo_speed > 2.6667 and t_lfo_params.lfo_speed <= 4 then current_beat = 8
+				elseif t_lfo_params.lfo_speed > 4 and t_lfo_params.lfo_speed <= 5.3333 then current_beat = 9
+				elseif t_lfo_params.lfo_speed > 5.3333 and t_lfo_params.lfo_speed <= 8 then current_beat = 10					
 				end			
 			
-				rv_beat, current_beat = reaper.ImGui_Combo(ctx, text_lfo_speed_clipped, current_beat, beat)
+				rv_beat, current_beat = reaper.ImGui_Combo(ctx, text_lfo_speed_clipped, current_beat, beat, 11)
 
 				if rv_beat then
 					if current_beat == 0 then
-						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 0.25)
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 0.25) -- 1/16
 					elseif current_beat == 1 then
-						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 0.5)
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 0.3333) -- 1/8t
 					elseif current_beat == 2 then
-						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 1)
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 0.5) -- 1/8
 					elseif current_beat == 3 then
-						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 2)
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 0.6667) -- 1/4t
 					elseif current_beat == 4 then
-						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 4)
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 1) -- 1/4
 					elseif current_beat == 5 then
-						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 8)																												
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 1.3333) -- 1/2t																										
+					elseif current_beat == 6 then
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 2) -- 1/2																										
+					elseif current_beat == 7 then
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 2.6667) -- 1/1t																										
+					elseif current_beat == 8 then
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 4) -- 1/1																										
+					elseif current_beat == 9 then
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 5.3333) -- 2/1t
+					elseif current_beat == 10 then
+						reaper.TrackFX_SetNamedConfigParm(track, fx, "param." .. param .. ".lfo.speed", 8) -- 2/1																																																								
 					end
 				end				
 
@@ -3088,7 +3146,7 @@ function DrawNativeACS(track, fx, param)
 			-- 	reaper.ImGui_EndCombo(ctx)
 			-- end	
 
-			local t_chan = {"1/2", "3/4", "5/6", "7/8"}	
+			local t_chan = {"1/2", "3/4", "5/6", "7/8", "9/10", "11/12"}	
 			
 			local track_ch = (reaper.GetMediaTrackInfo_Value(track, "I_NCHAN") * 0.5)
 			-- local actual_chan -- after track channel evaluation
@@ -3796,7 +3854,7 @@ function FlashmobInstanceSelector(track, title)
 			-- local mod_container_name_num = "(" .. mod_container_table_id .. "/" .. #t_flashmob_id .. ") " ..  mod_container_name -- Add the current flashmob instance index							
 			local mod_container_name_num = mod_container_name .. " (Flashmob instance " .. mod_container_table_id .. "/" .. #t_flashmob_id .. ") "   -- Add the current flashmob instance index							
 			-- if mod_container_name_clipped ~= mod_container_name then ToolTip(mod_container_name_num) end					 
-			ToolTip(mod_container_name_num)
+			ToolTip(mod_container_name_num, 1)
 			ToolTip("Left-click: Rename Flashmob instance")
 		end
 		reaper.ImGui_SameLine(ctx)
@@ -4037,6 +4095,9 @@ function Init()
 
 	setting_tooltip = reaper.GetExtState("vf_flashmob", "tooltip")	
 	if setting_tooltip == "" then setting_tooltip = 1 else setting_tooltip = tonumber(setting_tooltip) end	
+
+	setting_floating_fx = reaper.GetExtState("vf_flashmob", "floating_fx")	
+	if setting_floating_fx == "" then setting_floating_fx = 1 else setting_floating_fx = tonumber(setting_floating_fx) end		
 
 	-- Init Sidechain setting
 	setting_sidechain = 0
@@ -4407,6 +4468,17 @@ function Frame()
 					reaper.SetExtState("vf_flashmob", "track_control", setting_track_control, 1)					
 				end					
 				ToolTip("If enabled, FX parameters mapped to SNAPHEAP or NATIVE modulations \nare visible as Reaper Track Control (TCP and MCP)", 1)
+
+				if reaper.ImGui_Checkbox(ctx, "Floating FX", setting_floating_fx) then
+					if setting_floating_fx == 1 then 
+						setting_floating_fx = 0 
+					else 
+						setting_floating_fx = 1
+					end
+					reaper.SetExtState("vf_flashmob", "floating_fx", setting_floating_fx, 1)					
+				end					
+				ToolTip("If enabled, open FX in floating window instead of in FXChain\nCmd+click to reverse this behaviour", 1)
+
 				reaper.ImGui_Dummy(ctx, 0, 8)
 
 				reaper.ImGui_PushFont(ctx, fonts.medium_bold)	
@@ -4556,7 +4628,7 @@ function Frame()
 
 							local param_name_w, param_name_h = reaper.ImGui_CalcTextSize(ctx, param_name)
 							local x, y = reaper.ImGui_GetCursorScreenPos(ctx)
-							local param_name_hovering = reaper.ImGui_IsMouseHoveringRect(ctx, x, y, x + (width * 0.4), y + param_name_h + 4)
+							local param_name_hovering = reaper.ImGui_IsMouseHoveringRect(ctx, x, y, x + param_name_w, y + param_name_h + 4)
 
 							reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_ItemSpacing(), 4, 4)						
 
@@ -4599,7 +4671,7 @@ function Frame()
 							local param_name_color
 							if track_color == UI_color then param_name_color = white else param_name_color = track_color end
 							reaper.ImGui_TextColored(ctx, param_name_color, param_name_clipped)
-							if param_name_clipped ~= param_name then ToolTip(param_name,1) end
+							if param_name_clipped ~= param_name then ToolTip(param_name, 1) end
 
 							reaper.ImGui_PopFont(ctx)
 
@@ -4622,9 +4694,17 @@ function Frame()
 								fx_name_color = reaper.ImGui_GetColor(ctx, reaper.ImGui_Col_Text(), 1)
 								-- if reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Super()) then
 								if reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) and reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Ctrl()) then
-									reaper.TrackFX_Show(track, t_last_param.fx, 3) -- In floating window					
+									if setting_floating_fx == 0 then
+										reaper.TrackFX_Show(track, t_last_param.fx, 3) -- In floating window					
+									else
+										reaper.TrackFX_Show(track, t_last_param.fx, 1) -- In FXchain
+									end
 								elseif reaper.ImGui_IsMouseClicked(ctx, reaper.ImGui_MouseButton_Left()) then
-									reaper.TrackFX_Show(track, t_last_param.fx, 1) -- In FXchain
+									if setting_floating_fx == 0 then
+										reaper.TrackFX_Show(track, t_last_param.fx, 1) -- In FXchain
+									else
+										reaper.TrackFX_Show(track, t_last_param.fx, 3) -- In floating window					
+									end
 								end						
 							else
 								fx_name_color = reaper.ImGui_GetColor(ctx, reaper.ImGui_Col_Text(), 0.7)
@@ -5220,9 +5300,17 @@ function Frame()
 										-- Open FX
 										if reaper.ImGui_IsItemClicked(ctx, reaper.ImGui_MouseButton_Left()) then
 											if reaper.ImGui_IsKeyDown(ctx, reaper.ImGui_Mod_Ctrl()) then
-												reaper.TrackFX_Show(track, item.fx_id, 3) -- In floating window					
+												if setting_floating_fx == 0 then
+													reaper.TrackFX_Show(track, item.fx_id, 3) -- In floating window					
+												else
+													reaper.TrackFX_Show(track, item.fx_id, 1) -- In FXchain
+												end
 											else
-												reaper.TrackFX_Show(track, item.fx_id, 1) -- In FXchain	
+												if setting_floating_fx == 0 then
+													reaper.TrackFX_Show(track, item.fx_id, 1) -- In FXchain
+												else
+													reaper.TrackFX_Show(track, item.fx_id, 3) -- In floating window					
+												end
 											end
 										end					
 
@@ -5233,7 +5321,7 @@ function Frame()
 										local width_for_fxName = reaper.ImGui_GetContentRegionAvail(ctx)
 										local fx_name_clipped = ClipText(item.fx_name, width_for_fxName)
 										reaper.ImGui_TextColored(ctx, fx_name_col, fx_name_clipped)
-										if fx_name_clipped ~= item.fx_name then ToolTip(item.fx_name) end
+										if fx_name_clipped ~= item.fx_name then ToolTip(item.fx_name, 1) end
 										reaper.ImGui_PopFont(ctx)
 
 										local screen_x, screen_y = reaper.ImGui_GetCursorScreenPos(ctx)
@@ -5343,7 +5431,7 @@ function Frame()
 										reaper.ImGui_PopFont(ctx)
 									end										
 
-									if param_name_clipped ~= item.param_name then ToolTip(item.param_name) end									
+									if param_name_clipped ~= item.param_name then ToolTip(item.param_name, 1) end									
 									if not disabled then
 										ToolTip("Right-click: Open/close parameter modulation window\nAlt-click: Delete all associated modulations")									
 									end
