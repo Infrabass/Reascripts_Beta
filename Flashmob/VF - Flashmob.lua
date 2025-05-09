@@ -2,7 +2,7 @@
 -- @Screenshot https://imgur.com/i0Azzz1
 -- @Author Vincent Fliniaux (Infrabass)
 -- @Links https://github.com/Infrabass/Reascripts_Beta
--- @Version 0.5.10
+-- @Version 0.5.11
 -- @Changelog
 --   Minor UI improvements
 -- @Provides
@@ -371,8 +371,8 @@ function GetLastTouchedFXParam(track)
 							end
 						end						
 						
-						if new_param_guid_hack ~= last_param_guid_hack or force_update then
-							-- Bingo, a new parameter have been detected							
+						if new_param_guid_hack ~= last_param_guid_hack or force_update then						
+							-- Bingo, a new parameter have been detected					
 
 							if flashmob_inst and param <= 7 and macro_mod_enable == 0 then -- If last-touched FX param is a macro of any Flashmob on the track
 								if t_last_param.param then
@@ -663,6 +663,8 @@ function UnlinkParam(track, touched_fx, touched_param)
 			RemoveTrackControl(track, touched_fx, touched_param)
 		end
 	end
+
+	GetPMData(track, touched_fx, touched_param)
 	CheckIfModIsUsed(track, mod_container_id) -- To set plotline color
 	CheckIfMacroIsUsed(track, mod_container_id) -- To set macro slider color
 end
@@ -1233,7 +1235,7 @@ function GetBrightness(color)
 	return (r + g + b) / 3
 end
 
-function CustomSlider(label, valueA, valueB, min, max, width, height, default, mod_indicator, active, active_mod_range, color, valueA_fill)
+function CustomSlider(label, valueA, valueB, min, max, width, height, default, mod_indicator, active, active_mod_range, color, valueA_fill, show_val)
 	local width = width or 100
 	local height = height or 12
 	if width < 1 then width = 1 end
@@ -1297,21 +1299,10 @@ function CustomSlider(label, valueA, valueB, min, max, width, height, default, m
 		-- 	center_color
 		-- )  
 	else
-		reaper.ImGui_DrawList_AddRectFilled(
-			draw_list,
-			indicator_center - indicator_width * 0.5,
-			y,
-			indicator_center + indicator_width * 0.5,
-			y + height,
-			DarkerColor2(center_color, 0.5)
-
-			-- indicator_center - indicator_width/3,
-			-- y + height - 1,
-			-- indicator_center + indicator_width/3,
-			-- y + height - 4,
-			-- center_color
-		) 
-	end  
+		if not show_val then -- Hide center if value is display on top of slider
+			reaper.ImGui_DrawList_AddRectFilled(draw_list, indicator_center - indicator_width * 0.5, y, indicator_center + indicator_width * 0.5, y + height, DarkerColor2(center_color, 0.5)) 
+		end
+	end 
 
 	-- Draw indicator B (red) if applicable
 	-- if active_mod_range == 1 and mod_indicator == true then
@@ -1371,6 +1362,12 @@ function CustomSlider(label, valueA, valueB, min, max, width, height, default, m
 	local is_hovered = reaper.ImGui_IsItemHovered(ctx)
 	local is_active = reaper.ImGui_IsItemActive(ctx)
 	local value_changed = false  
+
+	if show_val then
+		local formatted_val = string.format('%.1f', valueA)
+		local text_w, text_h = reaper.ImGui_CalcTextSize(ctx, formatted_val)
+		reaper.ImGui_DrawList_AddText(draw_list, x + width * 0.5 - text_w * 0.5, y + 1, text_color, formatted_val)
+	end		
 
 	if active == 1 then
 		if is_active then
@@ -1866,6 +1863,10 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 					rv_offset, offset = OverviewSlider("##offset" .. i, offset, min, max, popup_width * 0.5 - (win_padding_x * 2), 16, 0.5, mod_assign_col, offset_formatted)
 					if rv_offset then
 
+						if t_last_param.param and t_last_param.fx == t_assignations[i].fx_id and t_last_param.param == t_assignations[i].param_id then
+							overview_baseline = 1
+						end
+
 						-- active as last-touched FX param
 						local val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
 						reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, val)
@@ -1873,10 +1874,10 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 						reaper.TrackFX_SetNamedConfigParm(track, t_assignations[i].fx_id, "param." .. t_assignations[i].param_id .. ".mod.baseline", offset)
 					end
 
-					-- show mod range
-					if reaper.ImGui_IsItemActive(ctx) then
-						overview_baseline = 1
-					end	
+					-- -- show mod range
+					-- if reaper.ImGui_IsItemActive(ctx) then
+					-- 	overview_baseline = 1
+					-- end	
 
 					reaper.ImGui_SameLine(ctx)
 
@@ -1897,7 +1898,10 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 					rv_amount, amount = OverviewSlider("##amount" .. i, amount, -1, 1, popup_width * 0.5 - (win_padding_x * 2), 16, 0, mod_assign_col, amount_formatted)
 					if rv_amount then
 
-						show_mod_value = true
+						if t_last_param.param and t_last_param.fx == t_assignations[i].fx_id and t_last_param.param == t_assignations[i].param_id then
+							show_mod_value = true
+							overview_scale = 1
+						end
 
 						-- active as last-touched FX param
 						local val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
@@ -1906,15 +1910,17 @@ function ModChild(track, fx, index, touched_fx, touched_param, track_sel_changed
 						reaper.TrackFX_SetNamedConfigParm(track, t_assignations[i].fx_id, "param." .. t_assignations[i].param_id .. ".plink.scale", amount)
 					end	
 
-					-- show mod range
-					if reaper.ImGui_IsItemActive(ctx) then
-						overview_scale = 1
-					end						
+					-- -- show mod range
+					-- if reaper.ImGui_IsItemActive(ctx) then
+					-- 	overview_scale = 1
+					-- end						
 
 					-- Update data
 					if rv_offset or rv_amount then
 						GetLastTouchedFXParam(track)
-						GetPMData(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+						if t_last_param.param and t_last_param.fx == t_assignations[i].fx_id and t_last_param.param == t_assignations[i].param_id then
+							GetPMData(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+						end
 					end					
 
 					reaper.ImGui_PopStyleVar(ctx, 1)
@@ -2116,14 +2122,16 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 			ToolTip("Right-click: Show Assignations\nShift+Click: Rename macro")
 		end			
 
-		reaper.ImGui_Dummy(ctx, 0, 0)
+		-- reaper.ImGui_Dummy(ctx, 0, 0)
+		local tweak_x, tweak_y = reaper.ImGui_GetCursorPos(ctx)
+		reaper.ImGui_SetCursorPos(ctx, tweak_x, tweak_y + 2)
 
 		local view_mod_range_slider = math.max(macro_is_linked, lfo_active, acs_active) -- Check if any modulation is active on the macro itself
 		if view_mod_range_slider == 1 then
 			macro_baseline["macro_baseline" .. str_index] = baseline
 			macro["macro" .. str_index] = macro_val
 			-- rv_macro["rv_macro" .. str_index], macro_baseline["macro_baseline" .. str_index], macro["macro" .. str_index] = CustomSlider("##" .. macro_name, macro_baseline["macro_baseline" .. str_index], macro["macro" .. str_index], min, max, width - x - win_padding_x, 13, 50, true, 1, view_mod_range_slider, BrighterColor(UI_color, 1))
-			rv_macro["rv_macro" .. str_index], macro_baseline["macro_baseline" .. str_index], macro["macro" .. str_index] = CustomSlider("##" .. macro_name, macro_baseline["macro_baseline" .. str_index], macro["macro" .. str_index], min, max, width - x - win_padding_x, 13, 50, true, 1, view_mod_range_slider, BrighterColor2(t_color_palette[mod_container_table_id], 0.3))
+			rv_macro["rv_macro" .. str_index], macro_baseline["macro_baseline" .. str_index], macro["macro" .. str_index] = CustomSlider("##" .. macro_name, macro_baseline["macro_baseline" .. str_index], macro["macro" .. str_index], min, max, width - x - win_padding_x, 15, 50, true, 1, view_mod_range_slider, BrighterColor2(t_color_palette[mod_container_table_id], 0.3), 0, 1)
 			if rv_macro["rv_macro" .. str_index] == true then	
 
 				-- Check if conditions are fullfilled to show Macro value
@@ -2146,7 +2154,7 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 		else
 			macro["macro" .. str_index] = macro_val
 			-- rv_macro["rv_macro" .. str_index], macro["macro" .. str_index] = CustomSlider("##" .. macro_name, macro["macro" .. str_index], 0, min, max, width - x - win_padding_x, 13, 50, false, 1, 0, BrighterColor(UI_color, 1))
-			rv_macro["rv_macro" .. str_index], macro["macro" .. str_index] = CustomSlider("##" .. macro_name, macro["macro" .. str_index], 0, min, max, width - x - win_padding_x, 13, 50, false, 1, 0, BrighterColor2(t_color_palette[mod_container_table_id], 0.3))
+			rv_macro["rv_macro" .. str_index], macro["macro" .. str_index] = CustomSlider("##" .. macro_name, macro["macro" .. str_index], 0, min, max, width - x - win_padding_x, 15, 50, false, 1, 0, BrighterColor2(t_color_palette[mod_container_table_id], 0.3), 0, 1)
 			if rv_macro["rv_macro" .. str_index] == true then
 				reaper.TrackFX_SetParam(track, fx, macro_param_id, macro["macro" .. str_index])
 			end			
@@ -2315,6 +2323,10 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 
 					if rv_offset then
 
+						if t_last_param.param and t_last_param.fx == t_assignations[i].fx_id and t_last_param.param == t_assignations[i].param_id then
+							overview_baseline = 1
+						end
+
 						-- active as last-touched FX param
 						local val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
 						reaper.TrackFX_SetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id, val)
@@ -2322,10 +2334,10 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 						reaper.TrackFX_SetNamedConfigParm(track, t_assignations[i].fx_id, "param." .. t_assignations[i].param_id .. ".mod.baseline", offset)
 					end
 
-					-- show mod range
-					if reaper.ImGui_IsItemActive(ctx) then
-						overview_baseline = 1
-					end	
+					-- -- show mod range
+					-- if reaper.ImGui_IsItemActive(ctx) then
+					-- 	overview_baseline = 1
+					-- end	
 
 					reaper.ImGui_SameLine(ctx)
 
@@ -2346,7 +2358,10 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 					rv_amount, amount = OverviewSlider("##amount" .. i, amount, -1, 1, popup_width * 0.5 - (win_padding_x * 2), 16, 0, mod_assign_col, amount_formatted)
 					if rv_amount then
 
-						show_mod_value = true
+						if t_last_param.param and t_last_param.fx == t_assignations[i].fx_id and t_last_param.param == t_assignations[i].param_id then
+							show_mod_value = true
+							overview_scale = 1
+						end
 
 						-- active as last-touched FX param
 						local val = reaper.TrackFX_GetParam(track, t_assignations[i].fx_id, t_assignations[i].param_id)
@@ -2356,14 +2371,18 @@ function Macro(track, fx, index, touched_fx, touched_param, track_sel_changed, p
 					end	
 
 					-- show mod range
-					if reaper.ImGui_IsItemActive(ctx) then
-						overview_scale = 1
-					end						
+					-- if reaper.ImGui_IsItemActive(ctx) then
+					-- 	if t_last_param.param and t_last_param.fx == t_assignations[i].fx_id and t_last_param.param == t_assignations[i].param_id then
+					-- 		overview_scale = 1
+					-- 	end
+					-- end						
 
 					-- Update data
 					if rv_offset or rv_amount then
 						GetLastTouchedFXParam(track)
-						GetPMData(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+						if t_last_param.param and t_last_param.fx == t_assignations[i].fx_id and t_last_param.param == t_assignations[i].param_id then						
+							GetPMData(track, t_assignations[i].fx_id, t_assignations[i].param_id)
+						end
 					end					
 
 					reaper.ImGui_PopStyleVar(ctx, 1)
@@ -2404,9 +2423,15 @@ function DrawMIDILearn(track, fx, param)
 
 		-- rv_midi_active, midi_learn_active = ToggleButton(ctx, "MIDI Learn", midi_learn_active, width - (win_padding_x * 2), 20)		
 		reaper.ImGui_PushFont(ctx, fonts.medium_bold)
+		local text_color = full_white
+		if t_last_param.param and (t_pm_data.link_active == 1 or t_pm_data.lfo_active == 1 or t_pm_data.acs_active == 1) then
+			text_color = reaper.ImGui_ColorConvertDouble4ToU32(1, 1, 1, 0.4)
+		end
+
 		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_CheckMark(), track_color)
+		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(), text_color)
 		rv_midi_active, midi_learn_active = reaper.ImGui_Checkbox(ctx, "MIDI LEARN", midi_learn_active)	
-		reaper.ImGui_PopStyleColor(ctx)
+		reaper.ImGui_PopStyleColor(ctx, 2)
 		reaper.ImGui_PopFont(ctx)	
 		-- ToolTip("currently not working due to a Reaper bug")	
 
@@ -2464,19 +2489,19 @@ function DrawNativeLFO(track, fx, param)
 		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_CheckMark(), track_color)
 		local checkbox_lfo = t_pm_data.lfo_active
 		rv_lfo_active, checkbox_lfo = reaper.ImGui_Checkbox(ctx, "NATIVE LFO", checkbox_lfo)				
-		ToolTip("Left-click: Enable/disable Native LFO\nRight-click: Open/close parameter modulation window")
+		ToolTip("Enable/disable Native LFO")
 		reaper.ImGui_PopStyleColor(ctx)
 		reaper.ImGui_PopFont(ctx)
 
-		-- Open native parameter modulation window
-		if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseReleased(ctx, reaper.ImGui_MouseButton_Right()) then
-			local _, visible = reaper.TrackFX_GetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible")
-			if visible == "1" then
-				reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible", 0)
-			else	
-				reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible", 1)
-			end
-		end			
+		-- -- Open native parameter modulation window
+		-- if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseReleased(ctx, reaper.ImGui_MouseButton_Right()) then
+		-- 	local _, visible = reaper.TrackFX_GetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible")
+		-- 	if visible == "1" then
+		-- 		reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible", 0)
+		-- 	else	
+		-- 		reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible", 1)
+		-- 	end
+		-- end			
 
 		if rv_lfo_active then
 			t_pm_data.lfo_active = checkbox_lfo and 1 or 0
@@ -2731,19 +2756,19 @@ function DrawNativeACS(track, fx, param)
 		reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_CheckMark(), track_color)
 		local checkbox_acs = t_pm_data.acs_active
 		rv_acs_active, checkbox_acs = reaper.ImGui_Checkbox(ctx, "NATIVE ACS", checkbox_acs)				
-		ToolTip("Left-click: Enable/disable Native Audio Follower\nRight-click: Open/close parameter modulation window")
+		ToolTip("Enable/disable Native Audio Follower")
 		reaper.ImGui_PopStyleColor(ctx)
 		reaper.ImGui_PopFont(ctx)		
 
-		-- Open native parameter modulation window
-		if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseReleased(ctx, reaper.ImGui_MouseButton_Right()) then
-			local _, visible = reaper.TrackFX_GetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible")
-			if visible == "1" then
-				reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible", 0)
-			else	
-				reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible", 1)
-			end
-		end	
+		-- -- Open native parameter modulation window
+		-- if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseReleased(ctx, reaper.ImGui_MouseButton_Right()) then
+		-- 	local _, visible = reaper.TrackFX_GetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible")
+		-- 	if visible == "1" then
+		-- 		reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible", 0)
+		-- 	else	
+		-- 		reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible", 1)
+		-- 	end
+		-- end	
 
 		if rv_acs_active then
 			t_pm_data.acs_active = checkbox_acs and 1 or 0
@@ -3091,6 +3116,10 @@ function DrawIcon(width, height, color, track, fx, param, state, icon)
 		ADEnvelope(draw_list, x, y, width, height, icon_color, 2)
 		ToolTip("Enable/disable Native Audio Follower")
 	elseif icon == 3 then
+		-- Set to disabled color if MIDI LEARN is override by other modulation
+		if t_last_param.param and (t_pm_data.link_active == 1 or t_pm_data.lfo_active == 1 or t_pm_data.acs_active == 1) then
+			icon_color = disabled_color
+		end
 		Midi(draw_list, x, y, 13, height, icon_color, 2)
 		ToolTip("MIDI learn")
 	end	
@@ -3371,7 +3400,7 @@ function CustomButton(ctx, index, button_nb, width, height, track, fx, param)
 	end	
 
 	if macroMod_toggle then 
-		macro_mod_enable = 1 - macro_mod_enable
+		macro_mod_enable = 1 - macro_mod_enable		
 
 		-- Restore the previous non-macro last-touched FX param when desactivate the "modulation mapping for macro"
 		if macro_mod_enable == 0 and t_previous_param.param then 
@@ -3390,6 +3419,8 @@ function CustomButton(ctx, index, button_nb, width, height, track, fx, param)
 				result = -1
 			end
 		end
+
+		if macro_mod_enable == 1 then force_update = true end -- Force update to show macro even if it was already the last-touched FX param
 	end
 
 	if helpPage_toggle then help_page = 1 - help_page end
@@ -4601,7 +4632,17 @@ function Frame()
 							if rv_last_touched_param_value_raw == true then
 								reaper.TrackFX_SetParam(track, t_last_param.fx, t_last_param.param, last_touched_param_value_raw)
 							end	
-						end															
+						end	
+
+						-- Open native parameter modulation window
+						if reaper.ImGui_IsItemHovered(ctx) and reaper.ImGui_IsMouseReleased(ctx, reaper.ImGui_MouseButton_Right()) then
+							local _, visible = reaper.TrackFX_GetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible")
+							if visible == "1" then
+								reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible", 0)
+							else	
+								reaper.TrackFX_SetNamedConfigParm(track, t_last_param.fx, "param." .. t_last_param.param .. ".mod.visible", 1)
+							end
+						end																					
 
 						-- Mod amount slider
 						if rv_flashmob == true then
@@ -4907,6 +4948,7 @@ function Frame()
 						if not previous_macro_mod_enable_overview then
 							previous_macro_mod_enable_overview = macro_mod_enable
 							macro_mod_enable = 1
+							force_update = true
 						end
 					else				
 						if previous_macro_mod_enable_overview then			
@@ -5635,6 +5677,7 @@ function Frame()
 										if not previous_macro_mod_enable then
 											previous_macro_mod_enable = macro_mod_enable
 											macro_mod_enable = 1
+											force_update = true
 										end
 									else				
 										if previous_macro_mod_enable then			
@@ -5724,6 +5767,7 @@ function Frame()
 									if not previous_macro_mod_enable then
 										previous_macro_mod_enable = macro_mod_enable
 										macro_mod_enable = 1
+										force_update = true
 									end
 								else				
 									if previous_macro_mod_enable then			
